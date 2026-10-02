@@ -30,6 +30,7 @@
 }
 
 :root {
+  color-scheme: light;
   --bg: #fafafa;
   --fg: #2e3338;
   --border: #d0d7de;
@@ -38,6 +39,18 @@
   --accent-warm: #a8512f; /* xterm 256-color 131 family */
   --code-bg: #eef1f4;
   --mono-term: "Maple Mono", "JetBrainsMono NFM", "JetBrainsMono Nerd Font Mono", monospace;
+}
+
+/* Dark palette — opt-in via `theme dark` (OSC 7770 → <html data-theme>). */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #16181d;
+  --fg: #d5dae1;
+  --border: #2c313a;
+  --dim: #8a919b;
+  --accent: #a884c0;
+  --accent-warm: #c87a55;
+  --code-bg: #1e2229;
 }
 
 * {
@@ -168,6 +181,24 @@ body {
   );
 }
 
+/* Dark: black scanlines vanish on a dark ground — invert to faint white
+   lines (screen blend) and deepen the vignette. */
+:root[data-theme="dark"] .terminal-frame::before {
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.035) 0 1px,
+    transparent 1px 3px
+  );
+  mix-blend-mode: screen;
+}
+:root[data-theme="dark"] .terminal-frame::after {
+  background: radial-gradient(
+    ellipse 120% 120% at 50% 50%,
+    transparent 55%,
+    rgba(0, 0, 0, 0.45) 100%
+  );
+}
+
 /* Visible scrollbars on the light theme (xterm's default thumb vanishes on
    white). */
 .xterm-viewport {
@@ -187,6 +218,15 @@ body {
 .xterm-viewport::-webkit-scrollbar-thumb:hover {
   background: #a8afb7;
 }
+:root[data-theme="dark"] .xterm-viewport {
+  scrollbar-color: #3a4150 transparent;
+}
+:root[data-theme="dark"] .xterm-viewport::-webkit-scrollbar-thumb {
+  background: #3a4150;
+}
+:root[data-theme="dark"] .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: #4a525c;
+}
 
 /* --- offline overlay --- */
 
@@ -204,6 +244,9 @@ body {
   color: var(--fg);
   text-align: center;
   padding: 24px;
+}
+:root[data-theme="dark"] .offline-overlay {
+  background: rgba(22, 24, 29, 0.93);
 }
 
 .offline-title {
@@ -365,6 +408,9 @@ body {
   inset: 0;
   background: rgba(46, 51, 56, 0.25);
   z-index: 20;
+}
+:root[data-theme="dark"] .palette-overlay {
+  background: rgba(0, 0, 0, 0.5);
 }
 
 .palette {

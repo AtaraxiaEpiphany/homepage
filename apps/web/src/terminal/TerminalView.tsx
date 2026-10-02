@@ -4,6 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { ShellClient } from "./wsClient.js";
 import type { ConnState } from "../lib/config.js";
+import { TERMINAL_THEMES, applyPageTheme, loadTheme, saveTheme } from "../theme.js";
 
 interface Props {
   onState: (state: ConnState, detail?: string) => void;
@@ -17,7 +18,8 @@ interface Props {
 /**
  * xterm.js ↔ WebSocket ↔ node-pty bridge. Binary frames both ways; the
  * terminal owns the shell's font (Maple Mono) and reflow/resize wiring.
- * Intercepts OSC 7770 (`open` in the shell) to pop the in-page viewer.
+ * Intercepts OSC 7770 — the shell's control channel (`open` pops the viewer,
+ * `theme` swaps the page palette).
  */
 export function TerminalView({ onState, clientRef, onOpenPath, onPalette, focusRef, blurRef }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -32,12 +34,7 @@ export function TerminalView({ onState, clientRef, onOpenPath, onPalette, focusR
       lineHeight: 1.15,
       cursorBlink: true,
       allowProposedApi: true,
-      theme: {
-        background: "#fafafa",
-        foreground: "#2e3338",
-        cursor: "#4a5158",
-        selectionBackground: "#d0d7de",
-      },
+      theme: TERMINAL_THEMES[loadTheme()],
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
@@ -84,9 +81,18 @@ export function TerminalView({ onState, clientRef, onOpenPath, onPalette, focusR
       return true;
     });
 
-    // open <path> — shell emits ESC]7770;open;<base64url(rel)>BEL
+    // OSC 7770 — the shell→page control channel:
+    //   open;<base64url(rel)>  → pop the in-page viewer
+    //   theme;dark|light       → swap page + terminal palette (theme cmd)
     term.parser.registerOscHandler(7770, (data) => {
       const [action, payload] = data.split(";");
+      if (action === "theme") {
+        if (payload !== "dark" && payload !== "light") return false;
+        applyPageTheme(payload);
+        saveTheme(payload);
+        term.options.theme = TERMINAL_THEMES[payload];
+        return true;
+      }
       if (action !== "open" || !payload) return false;
       const b64 = payload.replace(/-/g, "+").replace(/_/g, "/");
       try {
