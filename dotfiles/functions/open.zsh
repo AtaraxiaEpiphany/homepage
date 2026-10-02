@@ -4,10 +4,10 @@
 #   ESC ] 7770 ; open ; <base64url(content-relative path)> BEL
 # base64url (no padding) keeps `;`, spaces and CJK out of the OSC framing.
 #
-# Jail: realpath must land on a regular file under /home/dev/content, ≤ 2 MB.
+# Jail: realpath must land on a regular file under /home/tulip/content, ≤ 2 MB.
 # The HTTP layer re-validates the same jail — a forged OSC gains nothing.
 
- CONTENT_DIR=/home/dev/content
+ CONTENT_DIR=/home/tulip/content
 
 open() {
   local -a targets
