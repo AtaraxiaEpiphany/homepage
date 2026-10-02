@@ -1,0 +1,23 @@
+# Container copy of ~/.shell_aliases — shared alias definitions.
+# Diff vs host: `dotfiles` alias dropped (no bare repo in the sandbox);
+# vim/vi aliases guarded (nvim is not installed in the container).
+
+# --- Tools ---
+if command -v nvim >/dev/null 2>&1; then
+    alias vim=nvim
+    alias vi='\vim'
+fi
+alias bat=batcat
+
+# --- eza (modern ls) ---
+# Best-practice set: icons, directories first, git status in long views.
+# Guarded: shells without eza keep the GNU ls aliases.
+if command -v eza >/dev/null 2>&1; then
+    alias ls='eza --icons=auto --group-directories-first'
+    alias ll='eza -lh --icons=auto --group-directories-first --git'
+    alias la='eza -lha --icons=auto --group-directories-first --git'
+    alias lt='eza --tree --level=2 --icons=auto --group-directories-first'
+else
+    alias ls='ls --classify --color=auto'
+    alias ll='ls -alh --classify --color=auto'
+fi

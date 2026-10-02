@@ -1,0 +1,9 @@
+services:
+  # Build-only service: `docker compose build shell` produces homepage-shell:latest.
+  # Never `up`ped — the shell-server spawns one ephemeral container per session.
+  shell:
+    build:
+      context: .
+      dockerfile: container/Dockerfile
+    image: homepage-shell:latest
+    entrypoint: ["true"]

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>homepage — terminal edition</title>
+  </head>
+  <body>
+    <!-- "typewriter smudge" (hat tip to jyy's homepage): a smooth feTurbulence
+         field drives a small feDisplacementMap, so pixels shift a hair
+         organically — text stays sharp, just a subtle misalignment. Kept off
+         .page on purpose: an ancestor filter would re-anchor the fixed
+         viewer/palette to the page box instead of the viewport. -->
+    <svg class="defs-only" aria-hidden="true" focusable="false">
+      <defs>
+        <filter id="crt-smudge" color-interpolation-filters="sRGB"
+                x="0" y="0" width="100%" height="100%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.01" numOctaves="1" seed="5" result="noise"></feTurbulence>
+          <feDisplacementMap in="SourceGraphic" in2="noise" scale="4"
+                             xChannelSelector="R" yChannelSelector="G"></feDisplacementMap>
+        </filter>
+      </defs>
+    </svg>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

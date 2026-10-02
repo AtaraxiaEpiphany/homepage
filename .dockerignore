@@ -1,0 +1,4 @@
+# Keep build context tiny: the image only needs dotfiles/.
+*
+!dotfiles/
+!dotfiles/**

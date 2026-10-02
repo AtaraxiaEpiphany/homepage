@@ -1,0 +1,2 @@
+# Container shellrc — PATH is fully provided by the image (/usr/local/bin,
+# /usr/bin); no nvm/cargo/venv/toolchains in the sandbox.
