@@ -1,4 +1,7 @@
-# Keep build context tiny: the image only needs dotfiles/.
+# Keep build context tiny: the image only needs dotfiles/ and the
+# container/ build scripts.
 *
 !dotfiles/
 !dotfiles/**
+!container/
+!container/**

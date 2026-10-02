@@ -5,5 +5,11 @@ services:
     build:
       context: .
       dockerfile: container/Dockerfile
+      # Build with the host network: this box's Docker daemon.json pins
+      # container DNS to 8.8.8.8/1.1.1.1, which is unreachable here — apt/curl
+      # layers hang forever on the default bridge. Host network inherits the
+      # host's working resolver. Runtime containers are unaffected
+      # (--network none anyway).
+      network: host
     image: homepage-shell:latest
     entrypoint: ["true"]
