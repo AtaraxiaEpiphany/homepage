@@ -42,7 +42,23 @@ export function TerminalView({ onState, clientRef, onOpenPath, onPalette, focusR
     term.writeln("\x1b[90mstarting shell…\x1b[0m");
 
     const client = new ShellClient();
-    client.onState = onState;
+    // Deep link: /?cmd=demo injects one command line once the session is
+    // online (the pty buffers it until the prompt is live). Length-capped
+    // and newline-stripped — it lands as ordinary keystrokes in the same
+    // jailed shell, so this is convenience, not an extra authority.
+    let deepLinkRan = false;
+    client.onState = (state, detail) => {
+      onState(state, detail);
+      if (state === "online" && !deepLinkRan) {
+        deepLinkRan = true;
+        const cmd = new URLSearchParams(window.location.search).get("cmd");
+        if (cmd) {
+          window.history.replaceState(null, "", window.location.pathname);
+          const line = cmd.slice(0, 200).replace(/[\r\n]/g, " ");
+          window.setTimeout(() => client.input(line + "\r"), 250);
+        }
+      }
+    };
     // The placeholder line above is only visible until the shell's first
     // output arrives; erase it then (it sits one row up — writeln moved the
     // cursor past it) so it doesn't linger in scrollback.
