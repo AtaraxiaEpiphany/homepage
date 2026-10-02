@@ -1,6 +1,21 @@
-/* homepage — typewriter paper look. No glassmorphism, no gradients, no
-   rounded cards: square corners, 1px rules, ink on paper. */
+/* tulip — full-page light terminal, jyy-style. One 80ch rounded frame,
+   #fafafa ground, Maple Mono, CRT scanlines + vignette + smudge. */
 
+@font-face {
+  font-family: "Maple Mono";
+  src: url("../assets/fonts/MapleMono.woff2") format("woff2");
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Maple Mono";
+  src: url("../assets/fonts/MapleMono-Italic.woff2") format("woff2");
+  font-weight: 300 700;
+  font-style: italic;
+  font-display: swap;
+}
+/* Nerd Font Mono stays as fallback (icons from eza, etc.). */
 @font-face {
   font-family: "JetBrainsMono NFM";
   src: url("../assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf") format("truetype");
@@ -15,198 +30,162 @@
 }
 
 :root {
-  --paper: #faf8f2;
-  --ink: #22201c;
-  --ink-dim: #6b6659;
-  --accent: #b3432b;
-  --rule: #d8d2c2;
-  --term-bg: #141310;
-  --mono-prose: "Courier Prime", "Courier New", monospace;
-  --mono-term: "JetBrainsMono NFM", "JetBrainsMono Nerd Font Mono", monospace;
+  --bg: #fafafa;
+  --fg: #2e3338;
+  --border: #d0d7de;
+  --dim: #6b7177;
+  --accent: #75507b; /* xterm 256-color 62 family — light-bg-safe */
+  --accent-warm: #a8512f; /* xterm 256-color 131 family */
+  --code-bg: #eef1f4;
+  --mono-term: "Maple Mono", "JetBrainsMono NFM", "JetBrainsMono Nerd Font Mono", monospace;
 }
 
 * {
   box-sizing: border-box;
-  border-radius: 0 !important; /* house style: no rounded anything */
+}
+
+/* Zero-size SVG that only hosts <defs> (the grain filter). Kept out of layout. */
+.defs-only {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
 }
 
 html,
 body {
   margin: 0;
-  padding: 0;
-}
-
-body {
-  background: var(--paper);
-  color: var(--ink);
-  font-family: var(--mono-prose);
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--mono-term);
   font-size: 15px;
   line-height: 1.55;
 }
 
 .page {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 0 16px;
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
-  flex-direction: column;
-}
-
-/* --- header / footer --- */
-
-.site-header {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5em;
-  padding: 14px 0 10px;
-  border-bottom: 1px solid var(--rule);
-}
-
-.site-name {
-  font-weight: 700;
-}
-
-.site-tagline {
-  color: var(--ink-dim);
-}
-
-.site-footer {
-  border-top: 1px solid var(--rule);
-  margin-top: 14px;
-  padding: 10px 0 18px;
-  color: var(--ink-dim);
-  font-size: 13px;
+  padding: 12px;
 }
 
 .site-main {
   flex: 1;
+  min-width: 0;
   display: flex;
-  flex-direction: column;
+  justify-content: center;
 }
 
 .terminal-wrap {
   position: relative;
-}
-
-/* --- hero / sites / contact --- */
-
-.hero {
-  padding: 30px 0 12px;
-}
-
-.defs-only {
-  position: absolute;
-  width: 0;
-  height: 0;
-}
-
-.hero-art {
-  margin: 0;
-  font-family: var(--mono-term);
-  font-size: 15px;
-  line-height: 1.12;
-  filter: url(#crt-smudge);
-}
-
-.tulip-bloom {
-  color: var(--accent);
-}
-
-.tulip-stem {
-  color: var(--ink);
-}
-
-.hero-line {
-  color: var(--ink-dim);
-  margin: 2px 0 14px;
-}
-
-.hero-hint {
-  font-size: 13px;
-  color: var(--ink-dim);
-  margin: 0;
-}
-
-.hero-hint code {
-  background: #efece2;
-  padding: 1px 5px;
-  font-family: var(--mono-term);
-  font-size: 12px;
-}
-
-.section-title {
-  font-size: 14px;
-  letter-spacing: 1px;
-  color: var(--ink-dim);
-  margin: 20px 0 6px;
-}
-
-.site-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.site-list li {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
   display: flex;
-  gap: 0.75em;
-  align-items: baseline;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--rule);
-}
-
-.site-list a {
-  color: var(--ink);
-  text-decoration: none;
-  font-weight: 700;
-}
-
-.site-list a:hover {
-  color: var(--accent);
-}
-
-.site-prefix {
-  color: var(--accent);
-}
-
-.site-desc {
-  color: var(--ink-dim);
-  font-size: 13px;
-}
-
-.contact-list {
-  list-style: none;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 18px;
-  margin: 0;
-  padding: 0;
-}
-
-.contact-list a {
-  color: var(--ink);
-  text-decoration: none;
-}
-
-.contact-list a:hover {
-  color: var(--accent);
+  /* Cap at ~80 columns. Padding lives on the frame below; xterm mounts in the
+     padding-free .terminal-host, so FitAddon measures only the content width
+     (80ch) — otherwise it counts the padding as extra columns and text
+     overflows the right edge. */
+  max-width: calc(80ch + 38px);
 }
 
 /* --- terminal frame --- */
 
 .terminal-frame {
   position: relative;
-  border: 1px solid var(--ink);
-  background: var(--term-bg);
-  margin-top: 14px;
-  height: min(62vh, 640px);
+  flex: 1;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  /* Spacing between the terminal content and the rounded frame; extra bottom
+     padding also absorbs sub-pixel row overflow so the last line isn't
+     clipped by overflow:hidden. */
+  padding: 16px 18px 28px 18px;
+  overflow: hidden;
+  /* Hidden until the terminal has been fit at final (post-font-load)
+     metrics, then faded in — masks the pre-JS full-width frame and the
+     web-font swap reflow that would otherwise flash on load. */
+  opacity: 0;
+  transition: opacity 150ms ease-out;
+}
+.terminal-frame:has(.terminal-host.ready) {
+  opacity: 1;
 }
 
+/* xterm mount point — padding-free so its measured width is exactly the
+   terminal area (no phantom columns from the frame's padding). The smudge
+   filter is applied here, to the actual terminal pixels (foreground text). */
 .terminal-host {
   width: 100%;
   height: 100%;
-  padding: 8px 4px;
+  filter: url(#crt-smudge);
+}
+.terminal-host .xterm {
+  height: 100%;
+}
+
+/* Enable OpenType ligatures consistently. Chrome doesn't enable them by
+   default for this font while Safari does, so programming ligatures (=>,
+   ==) only showed in Safari. Maple Mono's ligatures are width-stable, so
+   they don't break xterm's cell alignment. */
+.terminal-host .xterm-rows,
+.terminal-host .xterm-rows span {
+  font-feature-settings: "liga" 1, "calt" 1;
+}
+
+/* CRT overlay — pure visual layers above the terminal. They never distort the
+   pixels beneath (no SVG filter / displacement), so there's no ghost, and
+   text stays crisp. pointer-events:none keeps input and selection reaching
+   xterm. */
+.terminal-frame::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 10;
+  /* Scanlines: the CRT phosphor mask. */
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.03) 0 1px,
+    transparent 1px 3px
+  );
+  mix-blend-mode: multiply;
+}
+.terminal-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 11;
+  /* Vignette: edges fall off, reading as curved glass depth without warping. */
+  background: radial-gradient(
+    ellipse 120% 120% at 50% 50%,
+    transparent 55%,
+    rgba(0, 0, 0, 0.13) 100%
+  );
+}
+
+/* Visible scrollbars on the light theme (xterm's default thumb vanishes on
+   white). */
+.xterm-viewport {
+  scrollbar-width: thin;
+  scrollbar-color: #c0c7cf transparent;
+}
+.xterm-viewport::-webkit-scrollbar {
+  width: 10px;
+}
+.xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+.xterm-viewport::-webkit-scrollbar-thumb {
+  background: #c0c7cf;
+  border-radius: 5px;
+}
+.xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: #a8afb7;
 }
 
 /* --- offline overlay --- */
@@ -214,13 +193,15 @@ body {
 .offline-overlay {
   position: absolute;
   inset: 0;
+  z-index: 12;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  background: rgba(20, 19, 16, 0.92);
-  color: #e8e4d8;
+  border-radius: 8px;
+  background: rgba(250, 250, 250, 0.93);
+  color: var(--fg);
   text-align: center;
   padding: 24px;
 }
@@ -232,18 +213,18 @@ body {
 }
 
 .offline-detail {
-  color: #b9b29e;
+  color: var(--dim);
   margin: 0;
 }
 
 .offline-hint {
   font-size: 13px;
-  color: #b9b29e;
+  color: var(--dim);
   margin: 0;
 }
 
 .offline-hint code {
-  background: #23211c;
+  background: var(--code-bg);
   padding: 1px 5px;
 }
 
@@ -253,13 +234,14 @@ body {
   background: none;
   color: var(--accent);
   border: 1px solid var(--accent);
+  border-radius: 6px;
   padding: 4px 14px;
   cursor: pointer;
 }
 
 .offline-retry:hover {
   background: var(--accent);
-  color: var(--paper);
+  color: #fff;
 }
 
 /* --- viewer overlay (open <path>) --- */
@@ -270,8 +252,8 @@ body {
   right: 0;
   bottom: 0;
   width: min(560px, 60vw);
-  background: var(--paper);
-  border-left: 1px solid var(--ink);
+  background: var(--bg);
+  border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   z-index: 10;
@@ -283,28 +265,29 @@ body {
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  border-bottom: 1px solid var(--rule);
+  border-bottom: 1px solid var(--border);
 }
 
 .viewer-path {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--ink-dim);
+  color: var(--dim);
   font-size: 13px;
 }
 
 .viewer-close {
   font: inherit;
   background: none;
-  border: 1px solid var(--ink);
+  border: 1px solid var(--border);
+  border-radius: 6px;
   padding: 1px 8px;
   cursor: pointer;
 }
 
 .viewer-close:hover {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--fg);
+  color: var(--bg);
 }
 
 .viewer-body {
@@ -317,12 +300,12 @@ body {
 .viewer-body h1,
 .viewer-body h2,
 .viewer-body h3 {
-  border-bottom: 1px solid var(--rule);
+  border-bottom: 1px solid var(--border);
   padding-bottom: 4px;
 }
 
 .viewer-body code {
-  background: #efece2;
+  background: var(--code-bg);
   padding: 1px 4px;
   font-family: var(--mono-term);
   font-size: 13px;
@@ -338,7 +321,7 @@ body {
   margin: 0;
   padding: 2px 12px;
   border-left: 3px solid var(--accent);
-  color: var(--ink-dim);
+  color: var(--dim);
 }
 
 .viewer-body table {
@@ -347,7 +330,7 @@ body {
 
 .viewer-body th,
 .viewer-body td {
-  border: 1px solid var(--rule);
+  border: 1px solid var(--border);
   padding: 4px 8px;
 }
 
@@ -357,16 +340,16 @@ body {
 }
 
 .mermaid-error {
-  color: var(--accent);
+  color: var(--accent-warm);
   white-space: pre-wrap;
 }
 
 .viewer-error {
-  color: var(--accent);
+  color: var(--accent-warm);
 }
 
 .viewer-loading {
-  color: var(--ink-dim);
+  color: var(--dim);
 }
 
 .viewer-plaintext {
@@ -375,12 +358,12 @@ body {
   font-size: 13px;
 }
 
-/* --- command palette (Ctrl+Shift+P) --- */
+/* --- command palette (Ctrl+Shift+P / ⌘⇧P) --- */
 
 .palette-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(20, 19, 16, 0.35);
+  background: rgba(46, 51, 56, 0.25);
   z-index: 20;
 }
 
@@ -390,21 +373,23 @@ body {
   left: 50%;
   transform: translateX(-50%);
   width: min(600px, 92vw);
-  background: var(--paper);
-  border: 1px solid var(--ink);
-  box-shadow: 5px 5px 0 rgba(20, 19, 16, 0.3);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(46, 51, 56, 0.15);
   z-index: 21;
+  overflow: hidden;
 }
 
 .palette-input {
   width: 100%;
   border: 0;
-  border-bottom: 1px solid var(--rule);
+  border-bottom: 1px solid var(--border);
   padding: 11px 14px;
   font: inherit;
   background: none;
   outline: none;
-  color: var(--ink);
+  color: var(--fg);
 }
 
 .palette-list {
@@ -416,7 +401,7 @@ body {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 1.5px;
-  color: var(--ink-dim);
+  color: var(--dim);
   padding: 8px 14px 3px;
 }
 
@@ -429,8 +414,8 @@ body {
 }
 
 .palette-item.sel {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--fg);
+  color: var(--bg);
 }
 
 .palette-icon {
@@ -438,12 +423,12 @@ body {
 }
 
 .palette-item.sel .palette-icon {
-  color: var(--paper);
+  color: var(--bg);
 }
 
 .palette-desc {
   margin-left: auto;
-  color: var(--ink-dim);
+  color: var(--dim);
   font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
@@ -451,20 +436,32 @@ body {
 }
 
 .palette-item.sel .palette-desc {
-  color: #b9b29e;
+  color: #c0c7cf;
 }
 
 .palette-empty {
   padding: 14px;
-  color: var(--ink-dim);
+  color: var(--dim);
   margin: 0;
 }
 
 .palette-footer {
   display: flex;
   gap: 16px;
-  border-top: 1px solid var(--rule);
+  border-top: 1px solid var(--border);
   padding: 6px 14px;
   font-size: 11px;
-  color: var(--ink-dim);
+  color: var(--dim);
+}
+
+/* --- phones: tighten margins/padding so ~35-col banner art still fits --- */
+
+@media (max-width: 640px) {
+  .page {
+    padding: 4px;
+  }
+  .terminal-frame {
+    padding: 12px 8px 22px 8px;
+    border-radius: 6px;
+  }
 }

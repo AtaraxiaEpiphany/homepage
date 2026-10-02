@@ -6,7 +6,7 @@
 flowchart LR
   A[浏览器] -->|WS 二进制帧| B[shell-server]
   B -->|docker run --rm| C[隔离容器]
-  C -->|zsh + fzf + p10k| D{真终端}
+  C -->|zsh + fzf + eza| D{真终端}
   D -->|OSC 7770| A
 ```
 

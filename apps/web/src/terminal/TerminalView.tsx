@@ -16,7 +16,7 @@ interface Props {
 
 /**
  * xterm.js ↔ WebSocket ↔ node-pty bridge. Binary frames both ways; the
- * terminal owns the shell's font (Nerd Font Mono) and reflow/resize wiring.
+ * terminal owns the shell's font (Maple Mono) and reflow/resize wiring.
  * Intercepts OSC 7770 (`open` in the shell) to pop the in-page viewer.
  */
 export function TerminalView({ onState, clientRef, onOpenPath, onPalette, focusRef, blurRef }: Props) {
@@ -27,16 +27,16 @@ export function TerminalView({ onState, clientRef, onOpenPath, onPalette, focusR
     if (!hostRef.current) return;
 
     const term = new Terminal({
-      fontFamily: '"JetBrainsMono NFM", "JetBrainsMono Nerd Font Mono", monospace',
-      fontSize: 14,
+      fontFamily: '"Maple Mono", "JetBrainsMono NFM", "JetBrainsMono Nerd Font Mono", monospace',
+      fontSize: 15,
       lineHeight: 1.15,
       cursorBlink: true,
       allowProposedApi: true,
       theme: {
-        background: "#141310",
-        foreground: "#e8e4d8",
-        cursor: "#b3432b",
-        selectionBackground: "#3a3a32",
+        background: "#fafafa",
+        foreground: "#2e3338",
+        cursor: "#4a5158",
+        selectionBackground: "#d0d7de",
       },
     });
     const fit = new FitAddon();
@@ -46,7 +46,17 @@ export function TerminalView({ onState, clientRef, onOpenPath, onPalette, focusR
 
     const client = new ShellClient();
     client.onState = onState;
-    client.onOutput = (data) => term.write(data);
+    // The placeholder line above is only visible until the shell's first
+    // output arrives; erase it then (it sits one row up — writeln moved the
+    // cursor past it) so it doesn't linger in scrollback.
+    let bannerCleared = false;
+    client.onOutput = (data) => {
+      if (!bannerCleared) {
+        bannerCleared = true;
+        term.write("\x1b[A\r\x1b[2K");
+      }
+      term.write(data);
+    };
     client.onExit = (code) => {
       term.writeln(
         `\r\n\x1b[90m[session exited${code !== null ? ` (code ${code})` : ""} — reload the page for a new shell]\x1b[0m`,
@@ -58,11 +68,16 @@ export function TerminalView({ onState, clientRef, onOpenPath, onPalette, focusR
 
     term.onData((data) => client.input(data));
 
-    // Ctrl+Shift+P opens the command palette; returning false keeps the
-    // keystroke out of the pty. (Ctrl+K is deliberately left to the shell —
-    // it is emacs kill-line.)
+    // Ctrl+Shift+P (and ⌘⇧P on Mac, where Meta replaces Ctrl) opens the
+    // command palette; returning false keeps the keystroke out of the pty.
+    // (Ctrl+K is deliberately left to the shell — it is emacs kill-line.)
     term.attachCustomKeyEventHandler((e) => {
-      if (e.type === "keydown" && e.ctrlKey && e.shiftKey && e.code === "KeyP") {
+      if (
+        e.type === "keydown" &&
+        e.shiftKey &&
+        e.code === "KeyP" &&
+        (e.ctrlKey || e.metaKey)
+      ) {
         onPalette();
         return false;
       }
@@ -109,6 +124,15 @@ export function TerminalView({ onState, clientRef, onOpenPath, onPalette, focusR
     const ro = new ResizeObserver(doFit);
     ro.observe(hostRef.current);
     doFit();
+    // Fade the frame in only once the web font is live and the fit is final —
+    // masks the pre-JS full-width frame and the font-swap reflow. The guard
+    // covers unmount racing font load (StrictMode double-mount): fitting a
+    // disposed term throws.
+    document.fonts.ready.then(() => {
+      if (termRef.current !== term) return;
+      doFit();
+      hostRef.current?.classList.add("ready");
+    });
     term.focus();
 
     return () => {

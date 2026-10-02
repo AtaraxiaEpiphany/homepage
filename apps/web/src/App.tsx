@@ -3,9 +3,6 @@ import { TerminalView } from "./terminal/TerminalView.js";
 import type { ShellClient } from "./terminal/wsClient.js";
 import { MarkdownViewer } from "./viewer/MarkdownViewer.js";
 import { CommandPalette } from "./palette/CommandPalette.js";
-import { Hero } from "./home/Hero.js";
-import { Sites } from "./home/Sites.js";
-import { Contact } from "./home/Contact.js";
 import { pushRecent } from "./lib/api.js";
 import type { ConnState } from "./lib/config.js";
 
@@ -54,15 +51,7 @@ export default function App() {
 
   return (
     <div className="page">
-      <header className="site-header">
-        <span className="site-name">hannibal@homepage</span>
-        <span className="site-tagline">— terminal edition (占位)</span>
-      </header>
-
       <main className="site-main">
-        <Hero />
-        <Sites />
-        <Contact />
         <div className="terminal-wrap">
           <TerminalView
             onState={onState}
@@ -105,10 +94,6 @@ export default function App() {
         runShell={runShell}
         restartSession={restartSession}
       />
-
-      <footer className="site-footer">
-        <span>© 2026 — placeholders everywhere (占位)</span>
-      </footer>
     </div>
   );
 }
