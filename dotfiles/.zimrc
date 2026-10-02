@@ -5,10 +5,8 @@ zmodule input
 zmodule termtitle
 zmodule utility
 #zmodule completion
-zmodule git-info
-zmodule duration-info
-zmodule prompt-pwd
-zmodule magicmace
+# Prompt: plain zsh PROMPT set in .zshrc/motd.zsh (jyy-style minimal) —
+# no zim prompt module (magicmace et al. would rewrite PROMPT every precmd).
 zmodule zsh-users/zsh-completions
 zmodule zsh-users/zsh-autosuggestions
 zmodule zsh-users/zsh-history-substring-search
@@ -18,4 +16,3 @@ zmodule hlissner/zsh-autopair
 zmodule pabloariasal/zfm
 zmodule agkozak/zsh-z
 zmodule Aloxaf/fzf-tab
-zmodule romkatv/powerlevel10k --use degit

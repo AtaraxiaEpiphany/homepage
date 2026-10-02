@@ -1,6 +1,6 @@
 # Container zshrc — homepage shell image.
-# Host-only stuff (openspec completions, nvm/cargo/venv, p10k instant prompt)
-# is dropped; everything else mirrors the host ~/.zshrc order.
+# Host-only stuff (openspec completions, nvm/cargo/venv) is dropped;
+# everything else mirrors the host ~/.zshrc order.
 # ZDOTDIR=/opt/dotfiles, ZIM_HOME=/opt/zim (both read-only, baked at build).
 
 [ -f "$ZDOTDIR/.shellrc" ] && source "$ZDOTDIR/.shellrc"
@@ -8,9 +8,6 @@
 # Zim modules — init.zsh is prebuilt at image build time; no download or
 # zimfw run here (ZIM_HOME is read-only at runtime).
 source "$ZIM_HOME/init.zsh"
-
-# To customize prompt, run `p10k configure` or edit .p10k.zsh.
-[[ ! -f "$ZDOTDIR/.p10k.zsh" ]] || source "$ZDOTDIR/.p10k.zsh"
 
 # fzf key bindings & completion (Ctrl-R / Ctrl-T / Alt-C, fzf-tab drives Tab)
 if fzf --zsh >/dev/null 2>&1; then
@@ -31,3 +28,10 @@ fi
 for f in "$ZDOTDIR"/functions/*.zsh(N); do
   source "$f"
 done
+
+# Minimal prompt (jyy-style): purple user, blue cwd, gray $ — plain zsh %F,
+# no prompt framework. Sourced before motd.zsh which uses the same palette.
+PROMPT=$'%F{62}tulip%f:%F{33}%~%f%F{244}$%f '
+
+# Welcome screen: word-art banner, tagline, sites/contacts, hints.
+[ -f "$ZDOTDIR/motd.zsh" ] && source "$ZDOTDIR/motd.zsh"

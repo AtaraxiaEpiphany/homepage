@@ -1,4 +1,4 @@
-# demo — AIGC-style typewriter showcase of this homepage's shell.
+# demo — AIGC-style typewriter showcase of this site's shell.
 #
 # Terminal-native on purpose: it really runs `cat`/`ll`/`open` in the live
 # shell; no frontend interception anywhere. Keys: space = pause/resume,
@@ -92,7 +92,7 @@ demo() {
   }
 
   printf '\e[36m'
-  _demo_type 'homepage demo — real shell, real commands' || _demo_abort_cleanup
+  _demo_type 'tulip demo — real shell, real commands' || _demo_abort_cleanup
   (( _DEMO_ABORT )) && return 0
   printf '\e[0m\r\n'
   _demo_type '(space = pause · q = quit) — everything below actually executes.' || { _demo_abort_cleanup; return 0; }
@@ -112,7 +112,7 @@ demo() {
   fi
 
   _demo_type 'try it yourself: ' $'\e[90m' || { _demo_abort_cleanup; return 0; }
-  _demo_type 'Ctrl-R (fzf history) · Tab (fzf-tab completion) · Ctrl-Shift-P (palette)' || { _demo_abort_cleanup; return 0; }
+  _demo_type 'Ctrl-R (fzf history) · Tab (fzf-tab completion) · Ctrl+Shift+P / ⌘⇧P (palette)' || { _demo_abort_cleanup; return 0; }
   printf '\r\n'
   _demo_type 'demo complete.' $'\e[32m' || { _demo_abort_cleanup; return 0; }
   printf '\r\n'
