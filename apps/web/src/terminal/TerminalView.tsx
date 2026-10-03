@@ -90,20 +90,26 @@ export function TerminalView({ onState, clientRef, onOpenPath, onPalette, focusR
     term.onData((data) => client.input(data));
 
     // Ctrl+Shift+P (and ⌘⇧P on Mac, where Meta replaces Ctrl) opens the
-    // command palette; returning false keeps the keystroke out of the pty.
-    // (Ctrl+K is deliberately left to the shell — it is emacs kill-line.)
-    term.attachCustomKeyEventHandler((e) => {
+    // command palette. Handled at the document level in the capture phase so
+    // it works regardless of which element has focus (the palette is a
+    // page-wide affordance, and macOS browsers otherwise eat ⌘⇧P before
+    // xterm's textarea would see it); stopPropagation keeps it out of the
+    // pty and preventDefault keeps it out of the browser (Firefox private
+    // window). Ctrl+K is deliberately left to the shell — emacs kill-line.
+    const paletteKeys = (e: KeyboardEvent) => {
       if (
         e.type === "keydown" &&
+        !e.repeat &&
         e.shiftKey &&
         e.code === "KeyP" &&
         (e.ctrlKey || e.metaKey)
       ) {
+        e.preventDefault();
+        e.stopPropagation();
         onPalette();
-        return false;
       }
-      return true;
-    });
+    };
+    window.addEventListener("keydown", paletteKeys, true);
 
     // OSC 7770 — the shell→page control channel:
     //   open;<base64url(rel)>  → pop the in-page viewer
@@ -171,6 +177,7 @@ export function TerminalView({ onState, clientRef, onOpenPath, onPalette, focusR
     term.focus();
 
     return () => {
+      window.removeEventListener("keydown", paletteKeys, true);
       ro.disconnect();
       client.dispose();
       term.dispose();
