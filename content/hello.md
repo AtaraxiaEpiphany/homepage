@@ -1,17 +1,34 @@
-# 你好 / Hello
+# Hello
 
-这是 tulip 的示例内容文件。这是一个**真实 shell** —— zsh、fzf、eza
-全部来自作者的日常配置，运行在一次性隔离容器里（无网络、只读 rootfs、非 root）。
+Hi, I'm **Hannibal**. I tinker with terminals, keyboards, and the
+occasional over-engineered homepage — the page you are reading this in
+is one: a real zsh in a disposable container, wired straight into your
+browser tab.
 
-## 试试这些
+## About me
 
-- `ll` —— eza 长列表（图标 + git 状态列）
-- `Ctrl-R` —— fzf 模糊搜索历史
-- `git che<Tab>` —— fzf-tab 模糊补全
-- `open ~/content/charts.md` —— 页面内打开 markdown 渲染
-- `demo` —— AIGC 风格逐字演示
-- `theme dark` / `theme light` —— 切换页面明暗主题
-- `status` —— 查看 shell 服务端状态（会话数 / 运行时长 / 镜像）
-- `Ctrl+Shift+P` / `⌘⇧P` —— 命令面板（快速搜文件）
+- Small sharp tools: zsh, fzf, eza, and vim keystrokes everywhere.
+- Typography nerd — even this page's font was chosen after an
+  afternoon-long debate with myself.
+- I write about systems, tooling, and random tangents; photos when
+  the tangent happened outdoors.
 
-> 内容均为占位素材，稍后替换为真实内容。
+## Find me
+
+- GitHub · Blog · RSS — links coming with the real launch
+- Email: `hi@example.com`
+- Or just leave a message in this shell — it won't read it, but it
+  looks friendly.
+
+## Try the place
+
+- `ll` — eza long listing (icons + git status column)
+- `Ctrl-R` — fzf fuzzy history search
+- `git che<Tab>` — fzf-tab fuzzy completion
+- `open ~/content/charts.md` — the in-page markdown renderer
+- `demo` — a typewriter tour of this place
+- `theme dark` / `theme light` — flip the page palette
+- `status` — shell server stats (sessions / uptime / image)
+- `Ctrl+Shift+P` / `⌘⇧P` — command palette (fuzzy file search)
+
+> Placeholder copy for now — the real about page ships with the site.

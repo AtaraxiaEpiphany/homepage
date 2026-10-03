@@ -1,40 +1,43 @@
-# charts — markdown 渲染能力展示 (mermaid + KaTeX)
+# charts — what this page can render
 
-## 流程图 (mermaid)
+The in-page viewer renders GFM markdown: mermaid diagrams, KaTeX math,
+and syntax-highlighted code. Demoed below with less important things.
+
+## Pour-over decision tree (mermaid flowchart)
 
 ```mermaid
 flowchart LR
-  A[浏览器] -->|WS 二进制帧| B[shell-server]
-  B -->|docker run --rm| C[隔离容器]
-  C -->|zsh + fzf + eza| D{真终端}
-  D -->|OSC 7770| A
+  A[beans] --> B[grind]
+  B --> C{how lazy today?}
+  C -->|not very| D[v60 pour-over]
+  C -->|very| E[french press]
+  D --> F[cup]
+  E --> F
 ```
 
-## 时序图 (mermaid)
+## A morning, formally specified (mermaid sequence)
 
 ```mermaid
 sequenceDiagram
-  participant U as 键盘
-  participant X as xterm.js
-  participant S as node-pty
-  participant Z as zsh
-  U->>X: 按键
-  X->>S: stdin 字节
-  S->>Z: PTY
-  Z-->>S: 输出 (ANSI)
-  S-->>X: WS binary
-  X-->>U: 渲染
+  participant M as me
+  participant C as coffee
+  participant T as terminal
+  M->>C: brew
+  C-->>M: caffeine
+  M->>T: open hello.md
+  T-->>M: this page
 ```
 
-## 数学 (KaTeX)
+## Math (KaTeX)
 
-欧拉恒等式:
+Euler's identity, still undefeated:
 
 $$e^{i\pi} + 1 = 0$$
 
-行内公式: 终端尺寸 $\text{cols} \times \text{rows}$, 高斯积分 $\int_{-\infty}^{\infty} e^{-x^2}\,dx = \sqrt{\pi}$。
+Inline too: a terminal of $\text{cols} \times \text{rows}$, the gaussian
+integral $\int_{-\infty}^{\infty} e^{-x^2}\,dx = \sqrt{\pi}$.
 
-## 代码块
+## Code
 
 ```python
 def fib(n: int) -> int:
@@ -44,4 +47,4 @@ def fib(n: int) -> int:
     return a
 ```
 
-> 占位素材 — 结构已就绪，内容待替换。
+> Placeholder copy — the layout is final, the words are negotiable.
