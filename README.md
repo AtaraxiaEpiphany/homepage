@@ -6,13 +6,13 @@ A full-page light terminal as the homepage, backed by a **real shell** (zsh + fz
 
 - **Full-page terminal**: xterm.js ↔ WebSocket ↔ node-pty ↔ containerized zsh. Terminal shortcuts work as-is: Ctrl-R (fzf history search), Tab (fzf-tab completion), Ctrl-A/E line editing, and the rest of your muscle memory.
 - **`open <path>`**: opens documents in-page. Markdown renders with GFM, mermaid diagrams, KaTeX math, and syntax-highlighted code; anything else shows as `<pre>` text. Bare `open` launches an fzf fuzzy picker with bat previews. Esc closes and returns focus to the terminal.
-- **`cat` / `ll` / etc.**: the container ships bat, eza, fd, fzf, with aliases matching a daily-driver setup.
+- **`cat` / `ll` / etc.**: the container ships bat, eza, fd, fzf, with aliases matching a daily-driver setup. bat auto-switches its syntax theme with the terminal background (Coldark-Cold on the light page, Coldark-Dark in dark mode).
 - **`demo`**: AIGC-style typewriter tour of the basics. `Space` pauses/resumes, `q` or Ctrl-C quits.
 - **`theme dark` / `theme light`**: swaps the page and terminal palette live, persists the choice in `localStorage` (defaults to the OS preference). Also in the command palette.
 - **`?cmd=<line>` deep link**: runs one command line once the shell is online — e.g. `/?cmd=open%20hello.md`. Length-capped, newline-stripped, and typed into the same jailed shell as ordinary keystrokes, so it grants no extra authority.
 - **`status`**: prints live shell-server stats (sessions, uptime, image) into the terminal via a JSON control frame; the shell stays stateless.
-- **Ctrl+Shift+P / ⌘⇧P**: VS Code-style command palette — fuzzy-search commands and `content/` files, shows recently opened; Enter routes markdown to the viewer, commands go to the real shell.
-- **Welcome screen**: the old hero/sites/contact sections now print as the shell's motd — `tulip` word-art banner, tagline, sites, contacts, and key hints.
+- **Ctrl+Shift+P / ⌘⇧P**: VS Code-style command palette — fuzzy-search commands and `content/` files, shows recently opened; Enter routes markdown to the viewer, commands go to the real shell. Bound at the page level, so it works without focusing the terminal first.
+- **Welcome screen**: the motd doubles as the site's hero — a one-line tagline and a quickstart (`open hello.md`, `demo`, `theme dark`, `status`) with the key hints, printed once per shell in English.
 - When the backend is unreachable an offline overlay appears (startup hints + retry button), with exponential-backoff reconnects; reloading reattaches to a still-live session.
 
 ## Architecture

@@ -40,12 +40,12 @@ export function CommandPalette({ open, onClose, onOpenFile, runShell, restartSes
 
   const commands = useMemo<Command[]>(
     () => [
-      { name: "demo", desc: "AIGC 风格功能演示 (space 暂停 · q 退出)", run: () => runShell("demo") },
-      { name: "open", desc: "fzf 模糊选择文件, 页面内打开", run: () => runShell("open") },
-      { name: "theme dark", desc: "切换到暗色", run: () => runShell("theme dark") },
-      { name: "theme light", desc: "切换到亮色", run: () => runShell("theme light") },
-      { name: "clear", desc: "清屏", run: () => runShell("clear") },
-      { name: "restart session", desc: "重启 shell 会话 (换新容器)", run: restartSession },
+      { name: "demo", desc: "typewriter tour of this shell (space pauses · q quits)", run: () => runShell("demo") },
+      { name: "open", desc: "fuzzy-pick a file, opens in-page", run: () => runShell("open") },
+      { name: "theme dark", desc: "switch to the dark palette", run: () => runShell("theme dark") },
+      { name: "theme light", desc: "switch to the light palette", run: () => runShell("theme light") },
+      { name: "clear", desc: "clear the screen", run: () => runShell("clear") },
+      { name: "restart session", desc: "restart the shell session (fresh container)", run: restartSession },
     ],
     [runShell, restartSession],
   );
