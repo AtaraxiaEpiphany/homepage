@@ -19,7 +19,7 @@ interface Props {
  * xterm.js ↔ WebSocket ↔ node-pty bridge. Binary frames both ways; the
  * terminal owns the shell's font (Maple Mono) and reflow/resize wiring.
  * Intercepts OSC 7770 — the shell's control channel (`open` pops the viewer,
- * `theme` swaps the page palette).
+ * `theme` swaps the page palette, `status` prints server stats).
  */
 export function TerminalView({ onState, clientRef, onOpenPath, onPalette, focusRef, blurRef }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -75,6 +75,14 @@ export function TerminalView({ onState, clientRef, onOpenPath, onPalette, focusR
         `\r\n\x1b[90m[session exited${code !== null ? ` (code ${code})` : ""} — reload the page for a new shell]\x1b[0m`,
       );
     };
+    client.onStatus = (s) => {
+      const mins = Math.floor(s.uptimeSec / 60);
+      const up =
+        mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`;
+      term.writeln(
+        `\r\n\x1b[38;5;244m[server] sessions ${s.sessions}/${s.maxSessions} · uptime ${up} · image ${s.image}\x1b[0m`,
+      );
+    };
     clientRef(client);
     client.connect();
     termRef.current = term;
@@ -100,8 +108,13 @@ export function TerminalView({ onState, clientRef, onOpenPath, onPalette, focusR
     // OSC 7770 — the shell→page control channel:
     //   open;<base64url(rel)>  → pop the in-page viewer
     //   theme;dark|light       → swap page + terminal palette (theme cmd)
+    //   status;(empty)         → ask server for stats, print the answer
     term.parser.registerOscHandler(7770, (data) => {
       const [action, payload] = data.split(";");
+      if (action === "status") {
+        client.requestStatus();
+        return true;
+      }
       if (action === "theme") {
         if (payload !== "dark" && payload !== "light") return false;
         applyPageTheme(payload);

@@ -12,6 +12,7 @@ export type C2S =
   /** Reattach to a live session after a WS drop, within the grace window. */
   | { type: "attach"; sessionId: string }
   | { type: "resize"; cols: number; rows: number }
+  | { type: "status" }
   | { type: "ping" };
 
 /** Server -> Client (JSON text frames). */
@@ -21,6 +22,8 @@ export type S2C =
   | { type: "attached"; sessionId: string; ok: boolean }
   | { type: "exit"; exitCode: number | null }
   | { type: "error"; code: "server_full" | "spawn_failed" | "busy"; message: string }
+  /** Answer to the `status` control frame — server-side shell stats. */
+  | { type: "status"; sessions: number; maxSessions: number; uptimeSec: number; image: string }
   | { type: "pong" };
 
 /** Extensions the markdown viewer renders as rich markdown; everything else is shown as plain text. */

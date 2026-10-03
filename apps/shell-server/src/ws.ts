@@ -93,6 +93,16 @@ export const wsRoutes: FastifyPluginAsync = async (app) => {
           state.session?.resize(msg.cols, msg.rows);
           break;
         }
+        case "status": {
+          send({
+            type: "status",
+            sessions: registry.size,
+            maxSessions: config.maxSessions,
+            uptimeSec: Math.floor(process.uptime()),
+            image: config.image,
+          });
+          break;
+        }
         case "ping": {
           send({ type: "pong" });
           break;

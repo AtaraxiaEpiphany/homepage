@@ -23,6 +23,13 @@ export class ShellClient {
   onState: (state: ConnState, detail?: string) => void = () => {};
   onOutput: (data: Uint8Array) => void = () => {};
   onExit: (exitCode: number | null) => void = () => {};
+  /** Answer to requestStatus() — server-side stats for the `status` command. */
+  onStatus: (info: {
+    sessions: number;
+    maxSessions: number;
+    uptimeSec: number;
+    image: string;
+  }) => void = () => {};
 
   private setState(state: ConnState, detail?: string): void {
     if (this.state !== state) {
@@ -101,6 +108,10 @@ export class ShellClient {
         this.onExit(msg.exitCode);
         break;
       }
+      case "status": {
+        this.onStatus(msg);
+        break;
+      }
       case "error": {
         this.onOutput(
           new TextEncoder().encode(
@@ -148,6 +159,11 @@ export class ShellClient {
   resize(cols: number, rows: number): void {
     this.pendingResize = { cols, rows };
     this.send({ type: "resize", cols, rows });
+  }
+
+  /** Ask the server for stats; the answer arrives via onStatus. */
+  requestStatus(): void {
+    this.send({ type: "status" });
   }
 
   /** Drop the saved session and start a fresh one (palette "restart session"). */
