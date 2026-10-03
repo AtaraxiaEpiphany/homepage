@@ -13,8 +13,10 @@ open() {
   local -a targets
   if (( $# == 0 )); then
     local picked
+    # --theme=light: the preview's stdout is not a tty, so bat's auto
+    # detection would fall back to its dark default on the light page.
     picked=$(fd --type f --exclude .git . "$CONTENT_DIR" 2>/dev/null \
-      | fzf --preview='bat --color=always {}' --preview-window=right:60%) || return 0
+      | fzf --preview='bat --color=always --theme=light {}' --preview-window=right:60%) || return 0
     targets=("$picked")
   else
     targets=("$@")

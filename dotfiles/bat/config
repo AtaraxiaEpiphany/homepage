@@ -1,0 +1,7 @@
+# bat config — baked into the image, picked up via BAT_CONFIG_PATH.
+# auto picks the theme from the terminal background (OSC 11, which xterm.js
+# answers): Coldark-Cold for the light page, Coldark-Dark for dark mode.
+# The stock default is a dark theme — unreadable on the #fafafa page.
+--theme="auto"
+--theme-light="Coldark-Cold"
+--theme-dark="Coldark-Dark"

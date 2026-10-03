@@ -1,13 +1,18 @@
 # Container copy of ~/.shell_aliases — shared alias definitions.
 # Diff vs host: `dotfiles` alias dropped (no bare repo in the sandbox);
-# vim/vi aliases guarded (nvim is not installed in the container).
+# vim/vi aliases guarded (nvim is not installed in the container);
+# bat/batcat alias only when the pinned bat binary is absent.
 
 # --- Tools ---
 if command -v nvim >/dev/null 2>&1; then
     alias vim=nvim
     alias vi='\vim'
 fi
-alias bat=batcat
+# bat: the image pins its own /usr/local/bin/bat; only alias to Ubuntu's
+# batcat when that's all there is (host/older images).
+if ! command -v bat >/dev/null 2>&1 && command -v batcat >/dev/null 2>&1; then
+    alias bat=batcat
+fi
 
 # --- eza (modern ls) ---
 # Best-practice set: icons, directories first, git status in long views.

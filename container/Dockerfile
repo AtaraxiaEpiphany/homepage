@@ -10,6 +10,7 @@ ARG UBUNTU_MIRROR=mirrors.aliyun.com
 ARG MIRROR_PROTOCOL=http
 ARG FZF_VERSION=0.67.0
 ARG EZA_VERSION=v0.23.5
+ARG BAT_VERSION=v0.26.1
 # BuildKit sets TARGETARCH itself (fzf tarball flavor in install-utils.sh).
 ARG TARGETARCH
 ARG ZIMFW_URL=https://github.com/zimfw/zimfw/releases/latest/download/zimfw.zsh
@@ -42,7 +43,8 @@ RUN userdel -r ubuntu 2>/dev/null; useradd -m -u 1000 -s /usr/bin/zsh tulip
 # .zimrc is copied alone first so later dotfiles edits don't re-run this layer.
 ENV ZIM_HOME=/opt/zim \
     ZIM_CONFIG_FILE=/opt/dotfiles/.zimrc \
-    ZDOTDIR=/opt/dotfiles
+    ZDOTDIR=/opt/dotfiles \
+    BAT_CONFIG_PATH=/opt/dotfiles/bat/config
 COPY dotfiles/.zimrc /opt/dotfiles/.zimrc
 RUN mkdir -p "$ZIM_HOME" \
  && curl -fsSL --retry 3 -o "$ZIM_HOME/zimfw.zsh" "$ZIMFW_URL" \
