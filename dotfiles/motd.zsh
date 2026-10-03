@@ -22,6 +22,6 @@ print
 print -r -- " ${c_warm}>${c_r} ${c_link}blog${c_r} ${c_dim}·${c_r}  ${c_warm}>${c_r} ${c_link}photos${c_r} ${c_dim}·${c_r}  ${c_warm}>${c_r} ${c_link}projects${c_r}   ${c_dim}(占位)${c_r}"
 print -r -- " ${c_dim}[${c_r}${c_link}github${c_r}${c_dim}]${c_r} ${c_dim}[${c_r}${c_link}email${c_r}${c_dim}]${c_r} ${c_dim}[${c_r}${c_link}rss${c_r}${c_dim}]${c_r}"
 print
-print -r -- " ${c_dim}try${c_r}  ${c_link}open hello.md${c_r} ${c_dim}· demo · help${c_r}"
+print -r -- " ${c_dim}try${c_r}  ${c_link}open hello.md${c_r} ${c_dim}· demo · theme · status${c_r}"
 print -r -- " ${c_dim}keys${c_r} ${c_dim}Ctrl-R history · Tab completion · Ctrl+Shift+P / ⌘⇧P palette${c_r}"
 print

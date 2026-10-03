@@ -8,6 +8,9 @@ A full-page light terminal as the homepage, backed by a **real shell** (zsh + fz
 - **`open <path>`**: opens documents in-page. Markdown renders with GFM, mermaid diagrams, KaTeX math, and syntax-highlighted code; anything else shows as `<pre>` text. Bare `open` launches an fzf fuzzy picker with bat previews. Esc closes and returns focus to the terminal.
 - **`cat` / `ll` / etc.**: the container ships bat, eza, fd, fzf, with aliases matching a daily-driver setup.
 - **`demo`**: AIGC-style typewriter tour of the basics. `Space` pauses/resumes, `q` or Ctrl-C quits.
+- **`theme dark` / `theme light`**: swaps the page and terminal palette live, persists the choice in `localStorage` (defaults to the OS preference). Also in the command palette.
+- **`?cmd=<line>` deep link**: runs one command line once the shell is online — e.g. `/?cmd=open%20hello.md`. Length-capped, newline-stripped, and typed into the same jailed shell as ordinary keystrokes, so it grants no extra authority.
+- **`status`**: prints live shell-server stats (sessions, uptime, image) into the terminal via a JSON control frame; the shell stays stateless.
 - **Ctrl+Shift+P / ⌘⇧P**: VS Code-style command palette — fuzzy-search commands and `content/` files, shows recently opened; Enter routes markdown to the viewer, commands go to the real shell.
 - **Welcome screen**: the old hero/sites/contact sections now print as the shell's motd — `tulip` word-art banner, tagline, sites, contacts, and key hints.
 - When the backend is unreachable an offline overlay appears (startup hints + retry button), with exponential-backoff reconnects; reloading reattaches to a still-live session.

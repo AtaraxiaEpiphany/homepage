@@ -10,6 +10,8 @@
 - `git che<Tab>` —— fzf-tab 模糊补全
 - `open ~/content/charts.md` —— 页面内打开 markdown 渲染
 - `demo` —— AIGC 风格逐字演示
+- `theme dark` / `theme light` —— 切换页面明暗主题
+- `status` —— 查看 shell 服务端状态（会话数 / 运行时长 / 镜像）
 - `Ctrl+Shift+P` / `⌘⇧P` —— 命令面板（快速搜文件）
 
 > 内容均为占位素材，稍后替换为真实内容。
