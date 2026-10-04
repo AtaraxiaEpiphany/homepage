@@ -112,7 +112,7 @@ demo() {
   fi
 
   _demo_type 'try it yourself: ' $'\e[90m' || { _demo_abort_cleanup; return 0; }
-  _demo_type 'Ctrl-R (fzf history) · Tab (fzf-tab completion) · Ctrl+Shift+P / ⌘⇧P (palette)' || { _demo_abort_cleanup; return 0; }
+  _demo_type 'Ctrl-R (fzf history) · Tab (fzf-tab completion) · Ctrl+P / ⌘P (palette)' || { _demo_abort_cleanup; return 0; }
   printf '\r\n'
   _demo_type 'demo complete.' $'\e[32m' || { _demo_abort_cleanup; return 0; }
   printf '\r\n'

@@ -25,5 +25,5 @@ print -r -- "          ${c_link}theme dark${c_r}      ${c_dim}flip the whole sit
 print -r -- "          ${c_link}status${c_r}          ${c_dim}sessions, uptime, image${c_r}"
 print -r -- "          ${c_link}open${c_r}            ${c_dim}fuzzy-pick any file (fzf + bat preview)${c_r}"
 print
-print -r -- " ${c_warm}keys${c_r}     ${c_link}Ctrl-R${c_r} ${c_dim}history${c_r}   ${c_link}Tab${c_r} ${c_dim}completion${c_r}   ${c_link}Ctrl+Shift+P${c_r} / ${c_link}⌘⇧P${c_r} ${c_dim}palette${c_r}"
+print -r -- " ${c_warm}keys${c_r}     ${c_link}Ctrl-R${c_r} ${c_dim}history${c_r}   ${c_link}Tab${c_r} ${c_dim}completion${c_r}   ${c_link}Ctrl+P${c_r} / ${c_link}⌘P${c_r} ${c_dim}palette${c_r}"
 print
