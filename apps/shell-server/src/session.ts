@@ -18,7 +18,11 @@ export class Session {
   private cols: number;
   private rows: number;
   /** WS currently bound to this session, if any. */
-  private socket: { send: (data: Buffer) => void; readyState: number } | null = null;
+  private socket: {
+    send: (data: Buffer) => void;
+    close: (code: number, reason: string) => void;
+    readyState: number;
+  } | null = null;
   /** PTY output buffered while no socket is attached (reattach gap). */
   private backlog: Buffer[] = [];
   private backlogBytes = 0;
@@ -47,7 +51,16 @@ export class Session {
     });
   }
 
-  attach(socket: { send: (data: Buffer) => void; readyState: number }): void {
+  attach(socket: {
+    send: (data: Buffer) => void;
+    close: (code: number, reason: string) => void;
+    readyState: number;
+  }): void {
+    // Supersede the previous holder so a late attacher can't keep writing
+    // stdin as a ghost. The wrapper's close() implementation must null its
+    // connection's state.session synchronously — the socket's late 'close'
+    // event then sees null and cannot detach us from the *incoming* binding.
+    this.socket?.close(4409, "superseded");
     this.socket = socket;
     for (const chunk of this.backlog) socket.send(chunk);
     this.backlog = [];

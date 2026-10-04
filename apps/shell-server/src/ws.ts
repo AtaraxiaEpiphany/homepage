@@ -41,6 +41,13 @@ export const wsRoutes: FastifyPluginAsync = async (app) => {
         send: (data: Buffer) => {
           if (socketRaw.readyState === socketRaw.OPEN) socketRaw.send(data, { binary: true });
         },
+        close: (code: number, reason: string) => {
+          // Null BEFORE closing the socket: the late 'close' event runs
+          // state.session?.detach() — if it still pointed at the session it
+          // would unbind whoever superseded us.
+          state.session = null;
+          if (socketRaw.readyState === socketRaw.OPEN) socketRaw.close(code, reason);
+        },
         readyState: socketRaw.readyState,
       });
     };
@@ -79,6 +86,10 @@ export const wsRoutes: FastifyPluginAsync = async (app) => {
           break;
         }
         case "attach": {
+          if (state.session && !state.session.exited) {
+            send({ type: "error", code: "busy", message: "connection already owns a session" });
+            return;
+          }
           const session = registry.get(msg.sessionId);
           if (session && !session.exited) {
             bind(session);
