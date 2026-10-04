@@ -171,6 +171,12 @@ export class ShellClient {
             `\r\n\x1b[31m[shell-server] ${msg.code}: ${msg.message}\x1b[0m\r\n`,
           ),
         );
+        // An error before we ever come online (e.g. server_full answering a
+        // create) otherwise leaves the state stuck on "connecting" — surface
+        // it in the overlay instead, where retry stays reachable.
+        if (this.state !== "online") {
+          this.setState("offline", `${msg.code}: ${msg.message}`);
+        }
         break;
       }
       case "pong":
