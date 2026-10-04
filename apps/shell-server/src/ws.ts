@@ -83,6 +83,7 @@ export const wsRoutes: FastifyPluginAsync = async (app) => {
           if (session && !session.exited) {
             bind(session);
             session.touch();
+            session.nudge(); // repaint for the freshly blank client screen
             send({ type: "attached", sessionId: session.id, ok: true });
           } else {
             send({ type: "attached", sessionId: msg.sessionId, ok: false });

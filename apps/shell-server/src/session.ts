@@ -15,6 +15,8 @@ export class Session {
   exited = false;
 
   private pty: IPty;
+  private cols: number;
+  private rows: number;
   /** WS currently bound to this session, if any. */
   private socket: { send: (data: Buffer) => void; readyState: number } | null = null;
   /** PTY output buffered while no socket is attached (reattach gap). */
@@ -23,6 +25,8 @@ export class Session {
   private static readonly BACKLOG_CAP = 256 * 1024;
 
   constructor(cols: number, rows: number, onExit: (session: Session) => void) {
+    this.cols = cols;
+    this.rows = rows;
     this.pty = spawn("docker", DOCKER_RUN_FLAGS, {
       name: "xterm-256color",
       cols,
@@ -67,7 +71,25 @@ export class Session {
   }
 
   resize(cols: number, rows: number): void {
-    if (cols > 0 && rows > 0) this.pty.resize(cols, rows);
+    if (cols > 0 && rows > 0) {
+      this.cols = cols;
+      this.rows = rows;
+      this.pty.resize(cols, rows);
+    }
+  }
+
+  /**
+   * Force a SIGWINCH so the shell repaints the screen. On reattach the
+   * backlog is empty (the previous socket already drained it) and a fresh
+   * xterm would otherwise sit on a blank/"starting shell…" screen until some
+   * incidental resize happens to fire. Same-size resizes are usually
+   * dropped by the kernel, so shrink one row and restore — zle, fzf & co.
+   * all repaint on WINCH.
+   */
+  nudge(): void {
+    if (this.exited || this.rows <= 1) return;
+    this.pty.resize(this.cols, this.rows - 1);
+    this.pty.resize(this.cols, this.rows);
   }
 
   touch(): void {
