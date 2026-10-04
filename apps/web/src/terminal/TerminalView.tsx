@@ -89,18 +89,23 @@ export function TerminalView({ onState, clientRef, onOpenPath, onPalette, focusR
 
     term.onData((data) => client.input(data));
 
-    // Ctrl+Shift+P (and ⌘⇧P on Mac, where Meta replaces Ctrl) opens the
-    // command palette. Handled at the document level in the capture phase so
-    // it works regardless of which element has focus (the palette is a
-    // page-wide affordance, and macOS browsers otherwise eat ⌘⇧P before
-    // xterm's textarea would see it); stopPropagation keeps it out of the
-    // pty and preventDefault keeps it out of the browser (Firefox private
-    // window). Ctrl+K is deliberately left to the shell — emacs kill-line.
+    // Ctrl+P / Ctrl+Shift+P (⌘P / ⌘⇧P on Mac, where Meta replaces Ctrl) open
+    // the command palette — VS Code muscle memory, so plain Ctrl+P works too,
+    // shift optional on both. Intercepted twice, because neither layer alone
+    // covers every platform:
+    //   1. Window-level capture — runs before xterm regardless of focus and
+    //      lets us keep the key out of the browser too (print dialog,
+    //      Firefox private window).
+    //   2. term.attachCustomKeyEventHandler — xterm's own gate. On macOS the
+    //      window event can be lost (IME processing, Safari menu handling,
+    //      focus races right after mount) while xterm's textarea still sees
+    //      it; swallowing it there means the shell never gets ^P
+    //      (previous-history) and the palette still opens.
+    // Ctrl+K is deliberately left to the shell — emacs kill-line.
     const paletteKeys = (e: KeyboardEvent) => {
       if (
         e.type === "keydown" &&
         !e.repeat &&
-        e.shiftKey &&
         e.code === "KeyP" &&
         (e.ctrlKey || e.metaKey)
       ) {
@@ -110,6 +115,13 @@ export function TerminalView({ onState, clientRef, onOpenPath, onPalette, focusR
       }
     };
     window.addEventListener("keydown", paletteKeys, true);
+    term.attachCustomKeyEventHandler((e) => {
+      if (e.type === "keydown" && e.code === "KeyP" && (e.ctrlKey || e.metaKey)) {
+        onPalette();
+        return false;
+      }
+      return true;
+    });
 
     // OSC 7770 — the shell→page control channel:
     //   open;<base64url(rel)>  → pop the in-page viewer
