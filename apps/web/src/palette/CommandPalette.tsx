@@ -27,8 +27,8 @@ interface Props {
 
 /**
  * VS Code-style command palette: commands + content files, fuzzy-filtered.
- * Opened with Ctrl+P or Ctrl+Shift+P (intercepted in TerminalView, the shell
- * never sees it). Enter routes markdown/txt to the viewer, anything else to the
+ * Opened with Ctrl+Shift+P (intercepted in TerminalView, the shell never
+ * sees it). Enter routes markdown/txt to the viewer, anything else to the
  * shell as an `open` invocation.
  */
 export function CommandPalette({ open, onClose, onOpenFile, runShell, restartSession }: Props) {
