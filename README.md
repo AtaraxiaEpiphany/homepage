@@ -29,7 +29,7 @@ Host  apps/shell-server          Fastify + @fastify/websocket + node-pty (Node 2
 Container  container/Dockerfile  ubuntu:24.04 · zimfw + fzf + eza + bat + fd
 ```
 
-Sandboxing: each session gets `docker run --rm` with a `--read-only` rootfs, `--network none`, `--cap-drop ALL`, `no-new-privileges`, pids/mem/cpu limits, the content directory bind-mounted read-only, running as non-root. Path validation for `open` (jail + size cap) happens twice — in the shell function and at the HTTP layer — so a forged OSC gains nothing.
+Sandboxing: each session gets `docker run --rm` with a `--read-only` rootfs, `--network none`, `--cap-drop ALL`, `no-new-privileges`, pids/mem/cpu limits, the content directory bind-mounted read-only, running as non-root. Path validation for `open` (jail + size cap) happens twice — in the shell function and at the HTTP layer — so a forged OSC gains nothing. Sessions are bound to a per-session secret issued at create; the id alone grants nothing.
 
 ## Local development
 
@@ -49,7 +49,7 @@ Build notes:
 - apt sources are swapped at build time by the [linuxmirrors](https://linuxmirrors.cn) script (`ARG UBUNTU_MIRROR=mirrors.aliyun.com`, over plain http since apt verifies via GPG-signed Release files). The script rewrites noble's deb822 `ubuntu.sources` — mirror domain, security suite, and all components (`main restricted universe multiverse`; the base image ships `main` only) — in one maintained place instead of hand-rolled sed rules. Override the mirror with `--build-arg UBUNTU_MIRROR=…` if you build elsewhere.
 - Package and binary installation lives in `container/scripts/` (`apt-mirror.sh`, `install-utils.sh`), not inline in the Dockerfile — thin declarative layers, reviewable shell, and version pins (`FZF_VERSION`, `EZA_VERSION`) passed in as build args.
 
-Configuration lives in `.env.example` (shell-server env: port, `WS_TOKEN`, session limits, idle reaping, etc.).
+Configuration lives in `.env.example` (shell-server env: port, bind host, `WS_TOKEN`, session limits, idle reaping, etc.).
 
 ## Deployment
 
@@ -60,7 +60,12 @@ The frontend deploys to GitHub Pages (base `/homepage/`):
    - `VITE_WS_URL`: a reachable shell backend WebSocket URL (e.g. `wss://…/ws`)
    - `VITE_API_URL`: the matching HTTP URL (e.g. `https://…`)
 
-The backend is a host process (it needs `docker run`), so Pages cannot host it — run it on a Docker-capable machine behind a wss-capable reverse proxy, with optional `WS_TOKEN`. Without those variables the site still deploys and just shows the offline overlay.
+The backend is a host process (it needs `docker run`), so Pages cannot host it — run it on a Docker-capable machine behind a wss-capable reverse proxy. It has two auth modes:
+
+- **Public mode** (default): `WS_TOKEN` unset. Every visitor gets a jailed shell. The server binds `127.0.0.1` and *refuses to start* on any wider `WS_HOST` without a token — put a local reverse proxy in front for TLS and public reachability.
+- **Private mode**: `WS_TOKEN` set. Clients must send the token as the first WebSocket message (the legacy `?token=` query form is gone — it leaked the token into request logs); without it they see the offline overlay. Build the frontend with `VITE_WS_TOKEN` set to the same value. Caveat: that token is baked into the shipped JS bundle, so private mode only makes sense with private frontend hosting.
+
+Without `VITE_WS_URL` the site still deploys and just shows the offline overlay.
 
 ## Content
 
