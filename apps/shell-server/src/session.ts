@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { spawn, type IPty } from "node-pty";
 import { DOCKER_RUN_FLAGS, config } from "./config.js";
 
@@ -9,6 +9,8 @@ import { DOCKER_RUN_FLAGS, config } from "./config.js";
  */
 export class Session {
   readonly id = randomUUID();
+  /** Bearer proof `attach` must present — knowing the id alone grants nothing. */
+  readonly secret = randomBytes(32).toString("base64url");
   readonly createdAt = Date.now();
   lastActivity = Date.now();
   exitCode: number | null = null;

@@ -1,15 +1,24 @@
 import type { C2S, S2C } from "@homepage/shared";
-import { WS_URL, type ConnState } from "../lib/config.js";
+import { WS_TOKEN, WS_URL, type ConnState } from "../lib/config.js";
 
 const SESSION_KEY = "homepage:sessionId";
+
+/** What sessionStorage holds: the id plus its bearer proof from `created`. */
+interface StoredSession {
+  id: string;
+  secret: string;
+}
 
 /**
  * Browser side of the shell bridge.
  *
- * - Control: JSON text frames (create / attach / resize / ping ...).
+ * - Control: JSON text frames (auth / create / attach / resize / ping ...).
  * - I/O: raw binary frames — keyboard bytes out, PTY bytes in.
  * - Reconnect: exponential backoff (0.5s → 8s); reattaches to the live
- *   session by id (kept in sessionStorage) before falling back to create.
+ *   session by id + secret (kept in sessionStorage) before falling back to
+ *   create. Auth failures (4401) and takeovers (4409) never auto-reconnect:
+ *   a retry cannot succeed, and re-attaching after a takeover would fight
+ *   the winner.
  */
 export class ShellClient {
   private ws: WebSocket | null = null;
@@ -19,6 +28,8 @@ export class ShellClient {
   private pingTimer: number | null = null;
   private disposed = false;
   private pendingResize: { cols: number; rows: number } | null = null;
+  /** Set by restart() so onclose reconnects immediately instead of backing off. */
+  private restartPending = false;
 
   onState: (state: ConnState, detail?: string) => void = () => {};
   onOutput: (data: Uint8Array) => void = () => {};
@@ -38,6 +49,26 @@ export class ShellClient {
     }
   }
 
+  /**
+   * Session id + secret from sessionStorage, or null. Shape-validating: a
+   * pre-secret entry (bare session id) fails the check and is dropped, which
+   * migrates old tabs to the new format on their next reload.
+   */
+  private readStored(): StoredSession | null {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw) as Partial<StoredSession>;
+      if (typeof parsed.id === "string" && typeof parsed.secret === "string") {
+        return { id: parsed.id, secret: parsed.secret };
+      }
+    } catch {
+      // fall through to removal
+    }
+    sessionStorage.removeItem(SESSION_KEY);
+    return null;
+  }
+
   // Not connected in the constructor: callers assign the callbacks right
   // after construction, and the no-backend path fires onState synchronously.
   connect(): void {
@@ -52,9 +83,12 @@ export class ShellClient {
     this.ws = ws;
 
     ws.onopen = () => {
-      const saved = sessionStorage.getItem(SESSION_KEY);
+      // Auth first when the server runs token mode; frames arrive in order,
+      // so create/attach simply queue behind the handshake.
+      if (WS_TOKEN) this.send({ type: "auth", token: WS_TOKEN });
+      const saved = this.readStored();
       if (saved) {
-        this.send({ type: "attach", sessionId: saved });
+        this.send({ type: "attach", sessionId: saved.id, secret: saved.secret });
       } else {
         this.send({ type: "create" });
         this.startPings();
@@ -69,9 +103,25 @@ export class ShellClient {
       }
     };
 
-    ws.onclose = () => {
+    ws.onclose = (ev) => {
       this.stopPings();
       if (this.disposed) return;
+      if (this.restartPending) {
+        this.restartPending = false;
+        this.connect();
+        return;
+      }
+      if (ev.code === 4401) {
+        // Build-time token mismatch — reconnecting cannot fix it.
+        this.setState("offline", "unauthorized — server requires WS_TOKEN (build with VITE_WS_TOKEN)");
+        return;
+      }
+      if (ev.code === 4409) {
+        // Superseded by another window; stealing back would ping-pong forever.
+        sessionStorage.removeItem(SESSION_KEY);
+        this.setState("offline", "session taken over by another window — retry for a fresh shell");
+        return;
+      }
       this.setState("offline");
       this.scheduleReconnect();
     };
@@ -84,7 +134,10 @@ export class ShellClient {
   private onControl(msg: S2C): void {
     switch (msg.type) {
       case "created": {
-        sessionStorage.setItem(SESSION_KEY, msg.sessionId);
+        sessionStorage.setItem(
+          SESSION_KEY,
+          JSON.stringify({ id: msg.sessionId, secret: msg.secret }),
+        );
         this.backoffMs = 500;
         this.setState("online");
         this.startPings();
@@ -166,10 +219,27 @@ export class ShellClient {
     this.send({ type: "status" });
   }
 
-  /** Drop the saved session and start a fresh one (palette "restart session"). */
+  /**
+   * Drop the saved session and start a fresh one (palette "restart session").
+   * Must work from any state — including the offline overlay after a 4401/
+   * 4409 close, which are exactly the states that suppress auto-reconnect.
+   */
   restart(): void {
     sessionStorage.removeItem(SESSION_KEY);
-    this.ws?.close();
+    this.backoffMs = 500;
+    if (this.reconnectTimer !== null) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.stopPings();
+    const ws = this.ws;
+    this.ws = null;
+    if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
+      this.restartPending = true;
+      ws.close(); // onclose sees restartPending and reconnects immediately
+    } else {
+      this.connect();
+    }
   }
 
   dispose(): void {

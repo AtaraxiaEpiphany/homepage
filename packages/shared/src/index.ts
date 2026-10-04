@@ -8,17 +8,30 @@
 
 /** Client -> Server (JSON text frames). */
 export type C2S =
+  | {
+      /** First-frame gate, required when the server runs with WS_TOKEN set. */
+      type: "auth";
+      token: string;
+    }
   | { type: "create" }
-  /** Reattach to a live session after a WS drop, within the grace window. */
-  | { type: "attach"; sessionId: string }
+  /**
+   * Reattach to a live session after a WS drop, within the grace window.
+   * `secret` is the per-session bearer proof issued once in `created`.
+   */
+  | { type: "attach"; sessionId: string; secret: string }
   | { type: "resize"; cols: number; rows: number }
   | { type: "status" }
   | { type: "ping" };
 
 /** Server -> Client (JSON text frames). */
 export type S2C =
-  | { type: "created"; sessionId: string }
-  /** ok=false means the session is gone; client must send `create`. */
+  | {
+      /** `secret` is the bearer proof `attach` must present. */
+      type: "created";
+      sessionId: string;
+      secret: string;
+    }
+  /** ok=false means the session is gone or the proof was rejected; client must send `create`. */
   | { type: "attached"; sessionId: string; ok: boolean }
   | { type: "exit"; exitCode: number | null }
   | { type: "error"; code: "server_full" | "spawn_failed" | "busy"; message: string }

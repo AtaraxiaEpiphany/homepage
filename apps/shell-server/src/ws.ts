@@ -1,14 +1,28 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { WebSocket } from "ws";
 import type { C2S, S2C } from "@homepage/shared";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { config } from "./config.js";
 import { Session, SessionRegistry } from "./session.js";
 
 const MAX_CONTROL_FRAME = 64 * 1024; // JSON text frames
 const MAX_INPUT_FRAME = 1024 * 1024; // raw stdin bytes (paste guard)
+const AUTH_DEADLINE_MS = 5_000; // first-frame auth budget when WS_TOKEN is set
+
+/**
+ * timingSafeEqual throws on length mismatches, and attacker-supplied strings
+ * are arbitrary — compare fixed-size SHA-256 digests instead.
+ */
+const safeEqual = (a: string, b: string): boolean =>
+  timingSafeEqual(
+    createHash("sha256").update(a).digest(),
+    createHash("sha256").update(b).digest(),
+  );
 
 interface ConnState {
   session: Session | null;
+  /** Token handshake done — everything but `auth` is ignored until true. */
+  authed: boolean;
 }
 
 export const wsRoutes: FastifyPluginAsync = async (app) => {
@@ -19,17 +33,19 @@ export const wsRoutes: FastifyPluginAsync = async (app) => {
   );
   app.addHook("onClose", async () => registry.dispose());
 
-  app.get("/ws", { websocket: true }, (socketRaw: WebSocket, req) => {
-    if (config.token && req.query !== undefined) {
-      const url = new URL(req.url, "http://localhost");
-      if (url.searchParams.get("token") !== config.token) {
-        socketRaw.close(4401, "unauthorized");
-        return;
-      }
-    }
-
-    const state: ConnState = { session: null };
+  app.get("/ws", { websocket: true }, (socketRaw: WebSocket) => {
+    // First-frame token auth. The browser WebSocket API cannot set headers,
+    // so the token travels as the first control message instead of the URL —
+    // which also keeps it out of request logs. Everything but `auth` is
+    // ignored until the handshake lands; silence or abuse closes 4401.
+    const state: ConnState = { session: null, authed: !config.token };
     socketRaw.binaryType = "nodebuffer";
+
+    let authTimer: NodeJS.Timeout | null = null;
+    if (config.token) {
+      authTimer = setTimeout(() => socketRaw.close(4401, "auth timeout"), AUTH_DEADLINE_MS);
+      authTimer.unref();
+    }
 
     const send = (msg: S2C) => {
       if (socketRaw.readyState === socketRaw.OPEN) socketRaw.send(JSON.stringify(msg));
@@ -53,6 +69,35 @@ export const wsRoutes: FastifyPluginAsync = async (app) => {
     };
 
     socketRaw.on("message", (data: Buffer, isBinary: boolean) => {
+      if (!state.authed) {
+        if (isBinary) {
+          socketRaw.close(4401, "unauthorized");
+          return;
+        }
+        if (data.length > MAX_CONTROL_FRAME) return;
+
+        let msg: C2S;
+        try {
+          msg = JSON.parse(data.toString("utf8")) as C2S;
+        } catch {
+          return;
+        }
+        if (
+          msg.type !== "auth" ||
+          typeof msg.token !== "string" ||
+          !safeEqual(msg.token, config.token)
+        ) {
+          socketRaw.close(4401, "unauthorized");
+          return;
+        }
+        state.authed = true;
+        if (authTimer !== null) {
+          clearTimeout(authTimer);
+          authTimer = null;
+        }
+        return;
+      }
+
       // Binary frames are raw stdin bytes for the bound session.
       if (isBinary) {
         if (data.length > MAX_INPUT_FRAME) return;
@@ -82,7 +127,7 @@ export const wsRoutes: FastifyPluginAsync = async (app) => {
           const rows = 24;
           const session = registry.create(cols, rows);
           bind(session);
-          send({ type: "created", sessionId: session.id });
+          send({ type: "created", sessionId: session.id, secret: session.secret });
           break;
         }
         case "attach": {
@@ -91,12 +136,19 @@ export const wsRoutes: FastifyPluginAsync = async (app) => {
             return;
           }
           const session = registry.get(msg.sessionId);
-          if (session && !session.exited) {
+          if (
+            session &&
+            !session.exited &&
+            typeof msg.secret === "string" &&
+            safeEqual(msg.secret, session.secret)
+          ) {
             bind(session);
             session.touch();
             session.nudge(); // repaint for the freshly blank client screen
             send({ type: "attached", sessionId: session.id, ok: true });
           } else {
+            // Gone or wrong secret — indistinguishable on purpose; the client
+            // falls back to `create` either way.
             send({ type: "attached", sessionId: msg.sessionId, ok: false });
           }
           break;
@@ -122,12 +174,15 @@ export const wsRoutes: FastifyPluginAsync = async (app) => {
       }
     });
 
-    socketRaw.on("close", () => {
+    const cleanup = () => {
+      if (authTimer !== null) {
+        clearTimeout(authTimer);
+        authTimer = null;
+      }
       state.session?.detach();
-    });
+    };
 
-    socketRaw.on("error", () => {
-      state.session?.detach();
-    });
+    socketRaw.on("close", cleanup);
+    socketRaw.on("error", cleanup);
   });
 };

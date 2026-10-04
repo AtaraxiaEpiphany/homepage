@@ -9,6 +9,13 @@ const env = import.meta.env;
 export const WS_URL: string =
   env.VITE_WS_URL || (env.DEV ? `ws://${location.host}/ws` : "");
 
+/**
+ * Shared secret for token-authenticated servers, sent as the first WS frame.
+ * WARNING: baked into the shipped JS bundle — only set for private frontend
+ * hosting; on a public bundle it is public knowledge.
+ */
+export const WS_TOKEN: string = env.VITE_WS_TOKEN || "";
+
 export const API_URL: string =
   env.VITE_API_URL || (env.DEV ? "" : "");
 
