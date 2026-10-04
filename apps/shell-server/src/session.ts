@@ -84,12 +84,16 @@ export class Session {
    * xterm would otherwise sit on a blank/"starting shell…" screen until some
    * incidental resize happens to fire. Same-size resizes are usually
    * dropped by the kernel, so shrink one row and restore — zle, fzf & co.
-   * all repaint on WINCH.
+   * all repaint on WINCH. The restore must be delayed: SIGWINCH coalesces,
+   * and two immediate resizes read as "size never changed" to the shell.
    */
   nudge(): void {
     if (this.exited || this.rows <= 1) return;
     this.pty.resize(this.cols, this.rows - 1);
-    this.pty.resize(this.cols, this.rows);
+    const restore = setTimeout(() => {
+      if (!this.exited) this.pty.resize(this.cols, this.rows);
+    }, 50);
+    restore.unref();
   }
 
   touch(): void {
