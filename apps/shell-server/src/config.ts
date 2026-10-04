@@ -13,7 +13,12 @@ const REPO_ROOT = path.resolve(dirname(fileURLToPath(import.meta.url)), "../../.
 
 export const config = {
   port: int("WS_PORT", 8787),
-  /** Shared secret for the WS upgrade (?token=...). Empty string disables auth (local dev). */
+  /**
+   * Bind address. Loopback by default: a tokenless (public-mode) server must
+   * never be routable — the guard below refuses any wider bind without a token.
+   */
+  host: process.env.WS_HOST ?? "127.0.0.1",
+  /** Shared secret for WS auth. Empty string = public mode, loopback-only (see guard below). */
   token: process.env.WS_TOKEN ?? "",
   maxSessions: int("MAX_SESSIONS", 4),
   /** Kill a session idle this long (ms), after a warning written into the PTY. */
@@ -49,4 +54,20 @@ export const DOCKER_RUN_FLAGS = [
 
 if (!existsSync(config.contentDir)) {
   throw new Error(`CONTENT_DIR does not exist: ${config.contentDir}`);
+}
+
+/**
+ * Public mode (no WS_TOKEN) hands a jailed shell to every connected client —
+ * only acceptable on loopback, where a local reverse proxy forwards to us.
+ * Fail closed at load so a wide bind never comes up unauthenticated.
+ */
+const isLoopbackHost = (h: string): boolean =>
+  h === "localhost" || h === "::1" || h.startsWith("127.");
+
+if (config.token === "" && !isLoopbackHost(config.host)) {
+  throw new Error(
+    `refusing to bind ${config.host} without WS_TOKEN — a no-auth shell server must stay on loopback. ` +
+      "Set WS_TOKEN to serve beyond loopback (clients then auth with a first-frame message; the frontend needs VITE_WS_TOKEN), " +
+      "or keep WS_HOST=127.0.0.1 and point a local reverse proxy at it.",
+  );
 }
