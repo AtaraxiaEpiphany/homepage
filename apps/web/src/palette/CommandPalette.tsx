@@ -23,6 +23,12 @@ interface Props {
   /** Inject a command line into the real shell (typed at the prompt). */
   runShell: (line: string) => void;
   restartSession: () => void;
+  /** True while the connection holds a waiting-room spot (either flavor). */
+  queued: boolean;
+  /** Give up the waiting-room spot. */
+  leaveQueue: () => void;
+  /** Play the demo replay in the overlay. */
+  watchReplay: () => void;
 }
 
 /**
@@ -31,7 +37,7 @@ interface Props {
  * sees it). Enter routes markdown/txt to the viewer, anything else to the
  * shell as an `open` invocation.
  */
-export function CommandPalette({ open, onClose, onOpenFile, runShell, restartSession }: Props) {
+export function CommandPalette({ open, onClose, onOpenFile, runShell, restartSession, queued, leaveQueue, watchReplay }: Props) {
   const files = useFileIndex();
   const [query, setQuery] = useState("");
   const [sel, setSel] = useState(0);
@@ -46,8 +52,12 @@ export function CommandPalette({ open, onClose, onOpenFile, runShell, restartSes
       { name: "theme light", desc: "switch to the light palette", run: () => runShell("theme light") },
       { name: "clear", desc: "clear the screen", run: () => runShell("clear") },
       { name: "restart session", desc: "restart the shell session (fresh container)", run: restartSession },
+      ...(queued
+        ? [{ name: "leave queue", desc: "give up the waiting-room spot", run: leaveQueue }]
+        : []),
+      { name: "watch replay", desc: "play the demo tour in the overlay", run: watchReplay },
     ],
-    [runShell, restartSession],
+    [runShell, restartSession, queued, leaveQueue, watchReplay],
   );
 
   // re-read recents each time the palette opens

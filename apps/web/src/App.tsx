@@ -105,6 +105,9 @@ export default function App() {
         onOpenFile={openPath}
         runShell={runShell}
         restartSession={restartSession}
+        queued={conn === "queued"}
+        leaveQueue={() => client?.leaveQueue()}
+        watchReplay={() => setPressure(true)}
       />
     </div>
   );

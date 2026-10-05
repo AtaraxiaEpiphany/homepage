@@ -45,6 +45,8 @@ export class ShellClient {
   private pendingResize: { cols: number; rows: number } | null = null;
   /** Set by restart() so onclose reconnects immediately instead of backing off. */
   private restartPending = false;
+  /** Set by leaveQueue() so onclose lands offline without reconnecting. */
+  private leavePending = false;
   /** WS URL of the current/target session — persisted with the session. */
   private wsTarget: string = WS_URL;
   /** Queue-ticket polling timer (broker mode). */
@@ -261,6 +263,11 @@ export class ShellClient {
         this.connect();
         return;
       }
+      if (this.leavePending) {
+        this.leavePending = false;
+        this.setState("offline", "left the queue — retry when you want back in");
+        return;
+      }
       if (ev.code === 4401) {
         // Build-time token mismatch — reconnecting cannot fix it.
         this.setState("offline", "unauthorized — server requires WS_TOKEN (build with VITE_WS_TOKEN)");
@@ -439,6 +446,26 @@ export class ShellClient {
       ws.close(); // onclose sees restartPending and reconnects immediately
     } else {
       this.connect();
+    }
+  }
+
+  /**
+   * Give up a waiting-room spot (palette action). Covers both queue flavors:
+   * broker ticket polling stops; a WS-held queue closes its socket, which
+   * cancels the ticket server-side. No auto-reconnect — retry (restart)
+   * re-enters admission fresh.
+   */
+  leaveQueue(): void {
+    this.preflightGen += 1;
+    this.stopQueuePoll();
+    this.setPressure(false);
+    const ws = this.ws;
+    this.ws = null;
+    if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
+      this.leavePending = true;
+      ws.close();
+    } else {
+      this.setState("offline", "left the queue — retry when you want back in");
     }
   }
 
