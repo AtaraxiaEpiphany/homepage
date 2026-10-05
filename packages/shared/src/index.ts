@@ -34,7 +34,7 @@ export type S2C =
   /** ok=false means the session is gone or the proof was rejected; client must send `create`. */
   | { type: "attached"; sessionId: string; ok: boolean }
   | { type: "exit"; exitCode: number | null }
-  | { type: "error"; code: "server_full" | "spawn_failed" | "busy"; message: string }
+  | { type: "error"; code: "server_full" | "spawn_failed" | "busy" | "draining"; message: string }
   /** Answer to the `status` control frame — server-side shell stats. */
   | { type: "status"; sessions: number; maxSessions: number; uptimeSec: number; image: string }
   | { type: "pong" };

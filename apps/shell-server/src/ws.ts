@@ -5,6 +5,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { config } from "./config.js";
 import { Session, SessionRegistry } from "./session.js";
 import { incCounter } from "./metrics.js";
+import { isDraining } from "./shutdown.js";
 
 const MAX_CONTROL_FRAME = 64 * 1024; // JSON text frames
 const MAX_INPUT_FRAME = 1024 * 1024; // raw stdin bytes (paste guard)
@@ -26,12 +27,7 @@ interface ConnState {
   authed: boolean;
 }
 
-export const wsRoutes: FastifyPluginAsync = async (app) => {
-  const registry = new SessionRegistry(
-    config.maxSessions,
-    config.reattachGraceMs,
-    config.idleTimeoutMs,
-  );
+export const wsRoutes: FastifyPluginAsync<{ registry: SessionRegistry }> = async (app, { registry }) => {
   app.addHook("onClose", async () => registry.dispose());
 
   app.get("/ws", { websocket: true }, (socketRaw: WebSocket) => {
@@ -119,6 +115,11 @@ export const wsRoutes: FastifyPluginAsync = async (app) => {
 
       switch (msg.type) {
         case "create": {
+          if (isDraining()) {
+            incCounter("rejections_total", { code: "draining" });
+            send({ type: "error", code: "draining", message: "server is shutting down — retry shortly" });
+            return;
+          }
           if (state.session && !state.session.exited) {
             incCounter("rejections_total", { code: "busy" });
             send({ type: "error", code: "busy", message: "connection already owns a session" });

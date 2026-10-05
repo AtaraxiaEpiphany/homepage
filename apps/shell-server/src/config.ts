@@ -25,6 +25,8 @@ export const config = {
   idleTimeoutMs: int("IDLE_TIMEOUT_MS", 30 * 60_000),
   /** Keep a detached session alive this long (ms) so the client can reattach. */
   reattachGraceMs: int("REATTACH_GRACE_MS", 30_000),
+  /** Shutdown budget (ms): refuse new sessions, let live ones drain, then kill. */
+  drainTimeoutMs: int("DRAIN_TIMEOUT_MS", 10_000),
   /** Read-only content jail exposed to the shell and the /api/file* routes. */
   contentDir: path.resolve(process.env.CONTENT_DIR ?? path.join(REPO_ROOT, "content")),
   image: process.env.IMAGE ?? "homepage-shell:latest",
