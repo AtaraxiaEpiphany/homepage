@@ -58,9 +58,14 @@ Configuration lives in `.env.example` (shell-server env: port, bind host, `WS_TO
 The frontend deploys to GitHub Pages (base `/homepage/`):
 
 1. Push to `main`; GitHub Actions (`.github/workflows/deploy.yml`) builds and publishes.
-2. In the repo's *Settings → Secrets and variables → Actions → Variables*, set:
-   - `VITE_WS_URL`: a reachable shell backend WebSocket URL (e.g. `wss://…/ws`)
-   - `VITE_API_URL`: the matching HTTP URL (e.g. `https://…`)
+2. In the repo's *Settings → Secrets and variables → Actions → Variables*, set the build vars:
+
+   | Variable          | Purpose                                                                                                       |
+   | ----------------- | ------------------------------------------------------------------------------------------------------------- |
+   | `VITE_WS_URL`     | Shell backend WebSocket URL (e.g. `wss://…/ws`); required unless only the broker is used.                      |
+   | `VITE_API_URL`    | Matching HTTP base (e.g. `https://…`) for `/api/file*` and `/api/replay`.                                      |
+   | `VITE_WS_TOKEN`   | Same value as the server's `WS_TOKEN` — private mode only; it ships in the bundle, so never for public sites.  |
+   | `VITE_BROKER_URL` | Base URL of a broker-enabled host (`https://…`); enables the multi-host pre-flight. Optional — see below.       |
 
 The backend is a host process (it needs `docker run`), so Pages cannot host it — run it on a Docker-capable machine behind a wss-capable reverse proxy. It has two auth modes:
 
@@ -106,8 +111,10 @@ BROKER_REDIS_URL=redis://127.0.0.1:6399 HOST_ID=a WS_PORT=8787 npm run start -w 
 BROKER_REDIS_URL=redis://127.0.0.1:6399 HOST_ID=b WS_PORT=8788 npm run start -w apps/shell-server
 ```
 
-The frontend's broker pre-flight (`VITE_BROKER_URL`) is optional and ships in
-a follow-up; without it, direct-WS visitors still queue — just per-host.
+The frontend's broker pre-flight (`VITE_BROKER_URL`) points at any
+broker-enabled host; visitors then land on whichever host admits them,
+and a page reload reattaches on the granting host directly. Without it,
+direct-WS visitors still queue — just per-host.
 
 ## Content
 
