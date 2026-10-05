@@ -91,13 +91,13 @@ while scanned < redis.call('LLEN', KEYS[1]) do
         table.insert(mine, t)
         scanned = 0
       else
+        -- LPOP already guarantees only this host holds the ticket, so the
+        -- queued-state value is ours to overwrite (SET NX would always fail
+        -- — the queued ticket occupies the key).
         local gj = cjson.encode({s = 'granted', v = v, u = url})
-        if redis.call('SET', 'hp:ticket:' .. t, gj, 'PX', grantTtl, 'NX') then
-          served = served + 1
-          scanned = 0
-        else
-          scanned = scanned + 1
-        end
+        redis.call('SET', 'hp:ticket:' .. t, gj, 'PX', grantTtl)
+        served = served + 1
+        scanned = 0
       end
     end
   end
