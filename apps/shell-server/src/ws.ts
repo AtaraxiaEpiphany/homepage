@@ -154,6 +154,10 @@ export const wsRoutes: FastifyPluginAsync<{
           send({ type: "error", code: "spawn_failed", message: "failed to start the shell container" });
           return;
         }
+      } else {
+        // Handouts leave the pool's reaper-invisible limbo: adopt them so
+        // reattach, reaping and the admission release apply from here on.
+        registry.adopt(session);
       }
       session.visitorId = state.visitor;
       bind(session);

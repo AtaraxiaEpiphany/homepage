@@ -29,6 +29,12 @@ export class Session {
   private pty: IPty;
   private cols: number;
   private rows: number;
+  /**
+   * Registry cleanup on shell exit — wired at construction and re-wired by
+   * `SessionRegistry.adopt` when the warm pool hands the session out, so the
+   * handout gets the same delete + `onSessionEnd` path as a cold create.
+   */
+  private exitFinalizer: (session: Session) => void;
   /** Set on the first PTY output — measures real shell readiness (zsh boot). */
   private firstOutputAt: number | null = null;
   /** WS currently bound to this session, if any. */
@@ -45,6 +51,7 @@ export class Session {
   constructor(cols: number, rows: number, onExit: (session: Session) => void) {
     this.cols = cols;
     this.rows = rows;
+    this.exitFinalizer = onExit;
     this.pty = spawn("docker", DOCKER_RUN_FLAGS, {
       name: "xterm-256color",
       cols,
@@ -76,8 +83,13 @@ export class Session {
       setGauge("sessions_active", --liveSessions);
       incCounter("session_exits_total");
       this.onPooledExit?.();
-      onExit(this);
+      this.exitFinalizer(this);
     });
+  }
+
+  /** Warm-pool handout: hand exit cleanup over to the adopting registry. */
+  wireExit(finalizer: (session: Session) => void): void {
+    this.exitFinalizer = finalizer;
   }
 
   attach(socket: {
@@ -220,6 +232,20 @@ export class SessionRegistry {  private sessions = new Map<string, Session>();
 
   get(id: string): Session | undefined {
     return this.sessions.get(id);
+  }
+
+  /**
+   * Register a warm-pool handout. Pooled shells live outside the registry
+   * (reaper-invisible by construction) until handed out; adoption gives
+   * them the exact cleanup `create` uses, so reattach, reaping and the
+   * admission release all apply from here on.
+   */
+  adopt(session: Session): void {
+    session.wireExit((s) => {
+      this.sessions.delete(s.id);
+      this.onSessionEnd?.(s);
+    });
+    this.sessions.set(session.id, session);
   }
 
   private reap(): void {
