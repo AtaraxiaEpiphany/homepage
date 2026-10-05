@@ -1,6 +1,15 @@
 import WebSocket from "ws";
 import { spawn, execSync } from "node:child_process";
 
+// Stack env this suite assumes (see README "Broker mode" era defaults apart):
+//   RATE_LIMIT_DISABLED=1        the suite shares one IP; create throttling
+//                                would otherwise eat later scenarios
+//   VISITOR_MAX_SESSIONS=3       tabs A and B are the SAME browser (one
+//                                visitor token): A boots (1), B boots its own
+//                                shell before stealing A's session (2), A's
+//                                post-takeover retry needs a third slot
+//   REATTACH_GRACE_MS=3000       reaps B's orphaned boot shell ~3s after its
+//                                reload, freeing the budget for that retry
 const PAGE = "http://localhost:5174/homepage/";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
