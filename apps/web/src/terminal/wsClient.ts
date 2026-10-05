@@ -1,5 +1,6 @@
 import type { C2S, S2C } from "@homepage/shared";
 import { WS_TOKEN, WS_URL, type ConnState } from "../lib/config.js";
+import { getVisitor } from "../lib/visitor.js";
 
 const SESSION_KEY = "homepage:sessionId";
 
@@ -84,13 +85,16 @@ export class ShellClient {
 
     ws.onopen = () => {
       // Auth first when the server runs token mode; frames arrive in order,
-      // so create/attach simply queue behind the handshake.
-      if (WS_TOKEN) this.send({ type: "auth", token: WS_TOKEN });
+      // so create/attach simply queue behind the handshake. The visitor token
+      // rides along wherever the protocol accepts it; empty = storage
+      // blocked, and the server treats us as budget-exempt.
+      const visitor = getVisitor();
+      if (WS_TOKEN) this.send({ type: "auth", token: WS_TOKEN, visitor });
       const saved = this.readStored();
       if (saved) {
         this.send({ type: "attach", sessionId: saved.id, secret: saved.secret });
       } else {
-        this.send({ type: "create" });
+        this.send({ type: "create", visitor });
         this.startPings();
       }
     };
@@ -152,7 +156,7 @@ export class ShellClient {
           if (this.pendingResize) this.send({ type: "resize", ...this.pendingResize });
         } else {
           sessionStorage.removeItem(SESSION_KEY);
-          this.send({ type: "create" });
+          this.send({ type: "create", visitor: getVisitor() });
         }
         break;
       }

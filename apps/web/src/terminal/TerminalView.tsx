@@ -163,8 +163,12 @@ export function TerminalView({ onState, clientRef, onOpenPath, onPalette, focusR
 
     focusRef.current = () => term.focus();
     blurRef.current = () => term.blur();
-    // dev/test hook: lets verification scripts read the buffer
-    if (import.meta.env.DEV) (window as unknown as { __term?: Terminal }).__term = term;
+    // dev/test hook: lets verification scripts read the buffer and drive the
+    // client (visitor token, connection state) without reaching into React.
+    if (import.meta.env.DEV) {
+      (window as unknown as { __term?: Terminal }).__term = term;
+      (window as unknown as { __shell?: ShellClient }).__shell = client;
+    }
 
     const doFit = () => {
       try {
