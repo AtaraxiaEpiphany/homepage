@@ -14,6 +14,7 @@ A full-page light terminal as the homepage, backed by a **real shell** (zsh + fz
 - **Ctrl+P / Ctrl+Shift+P / ⌘P / ⌘⇧P**: VS Code-style command palette — fuzzy-search commands and `content/` files, shows recently opened; Enter routes markdown to the viewer, commands go to the real shell. Bound at the page level, so it works without focusing the terminal first. The page keeps Ctrl+P for the palette, so shell previous-history lives on ↑ / Ctrl-R (inside the fzf picker, navigate with the arrows or Ctrl-J/K).
 - **Welcome screen**: the motd doubles as the site's hero — a one-line tagline and a quickstart (`open hello.md`, `demo`, `theme dark`, `status`) with the key hints, printed once per shell in English.
 - When the backend is unreachable an offline overlay appears (startup hints + retry button), with exponential-backoff reconnects; reloading reattaches to a still-live session.
+- **Concurrency ladder**: a warm pool pre-spawns shells so creates land in ~20ms; when capacity is full visitors queue in a waiting room (live position, fairness keyed by a per-browser token); per-IP floors throttle create spam, auth-failure lockout and connection caps; grace/idle timeouts tighten under saturation; `/api/metrics` exposes the counters. Pool shells count inside `MAX_SESSIONS`, so the worst-case host load is unchanged.
 
 ## Architecture
 
@@ -73,4 +74,4 @@ Markdown files under `content/` are what `open` and the command palette can open
 
 ## Explicitly out of scope (post-MVP)
 
-Warm container pools, public-facing auth/TLS termination (reverse proxy territory), tmux session persistence, deep mobile adaptation.
+Public-facing auth/TLS termination (reverse proxy territory), tmux session persistence, deep mobile adaptation. (Warm container pools shipped — see the concurrency ladder in Features.)
