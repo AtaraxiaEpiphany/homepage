@@ -43,6 +43,13 @@ export const config = {
   visitorMaxSessions: int("VISITOR_MAX_SESSIONS", 1),
   queueMax: int("QUEUE_MAX", 8),
   queueTimeoutMs: int("QUEUE_TIMEOUT_MS", 120_000),
+  /** Warm pool: pre-spawned shells ready at create time (inside the max budget). */
+  poolSize: int("POOL_SIZE", 2),
+  /** Max age of an unclaimed pool shell before it is churned. */
+  poolShellTtlMs: int("POOL_SHELL_TTL_MS", 600_000),
+  /** Saturation floors for the adaptive grace/idle shrink. */
+  minReattachGraceMs: int("MIN_REATTACH_GRACE_MS", 5_000),
+  minIdleTimeoutMs: int("MIN_IDLE_TIMEOUT_MS", 180_000),
   /** Read-only content jail exposed to the shell and the /api/file* routes. */
   contentDir: path.resolve(process.env.CONTENT_DIR ?? path.join(REPO_ROOT, "content")),
   image: process.env.IMAGE ?? "homepage-shell:latest",

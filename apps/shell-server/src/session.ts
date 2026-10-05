@@ -21,6 +21,10 @@ export class Session {
   exited = false;
   /** Fairness key of the creating client, for admission accounting. */
   visitorId: string | null = null;
+  /** When the warm pool took this session in; null once handed out. */
+  pooledAt: number | null = null;
+  /** Set by the warm pool: fires when the shell dies while still pooled. */
+  onPooledExit: (() => void) | null = null;
 
   private pty: IPty;
   private cols: number;
@@ -71,6 +75,7 @@ export class Session {
       this.exitCode = exitCode ?? null;
       setGauge("sessions_active", --liveSessions);
       incCounter("session_exits_total");
+      this.onPooledExit?.();
       onExit(this);
     });
   }
@@ -160,12 +165,30 @@ export class Session {
 }
 
 /**
+ * Saturation-shrinking timeouts: at ≤50% utilization the configured maxima
+ * apply unchanged; as the pool fills, grace and idle tighten toward the
+ * configured floors so pressure drains sessions faster. Pure — unit-testable.
+ */
+export function effectiveTimeouts(
+  bound: number,
+  max: number,
+  maxGraceMs: number,
+  minGraceMs: number,
+  maxIdleMs: number,
+  minIdleMs: number,
+): { graceMs: number; idleMs: number } {
+  const u = max > 0 ? bound / max : 0;
+  const k = Math.min(1, Math.max(0, (u - 0.5) / 0.5));
+  const lerp = (hi: number, lo: number) => Math.round(hi + (lo - hi) * k);
+  return { graceMs: lerp(maxGraceMs, minGraceMs), idleMs: lerp(maxIdleMs, minIdleMs) };
+}
+
+/**
  * Owns all live sessions and the reaper loop:
  * - detached sessions die after the reattach grace window,
  * - idle sessions get a warning, then a 60s stay of execution.
  */
-export class SessionRegistry {
-  private sessions = new Map<string, Session>();
+export class SessionRegistry {  private sessions = new Map<string, Session>();
   private timer: NodeJS.Timeout;
   /**
    * Set by the ws layer: fires once per session end (shell exit), after the
@@ -201,21 +224,29 @@ export class SessionRegistry {
 
   private reap(): void {
     const now = Date.now();
+    const { graceMs, idleMs } = effectiveTimeouts(
+      this.sessions.size,
+      config.maxSessions,
+      this.reattachGraceMs,
+      config.minReattachGraceMs,
+      this.idleTimeoutMs,
+      config.minIdleTimeoutMs,
+    );
     for (const session of this.sessions.values()) {
       if (session.exited) {
         this.sessions.delete(session.id);
         continue;
       }
       const detachedFor = session.detachedAt === null ? 0 : now - session.detachedAt;
-      if (!session.hasSocket && detachedFor > this.reattachGraceMs) {
+      if (!session.hasSocket && detachedFor > graceMs) {
         session.kill();
         continue;
       }
       const idleFor = now - session.lastActivity;
-      if (idleFor > this.idleTimeoutMs && !session.warned) {
+      if (idleFor > idleMs && !session.warned) {
         session.warned = true;
         session.write(Buffer.from("\r\n\x1b[33m[shell-server] idle timeout in 60s — press any key to keep the session\x1b[0m\r\n"));
-      } else if (session.warned && idleFor > this.idleTimeoutMs + 60_000) {
+      } else if (session.warned && idleFor > idleMs + 60_000) {
         session.kill();
       }
     }

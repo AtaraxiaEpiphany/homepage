@@ -4,6 +4,7 @@ import type { C2S, S2C } from "@homepage/shared";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { config } from "./config.js";
 import { Session, SessionRegistry } from "./session.js";
+import { WarmPool } from "./pool.js";
 import { incCounter } from "./metrics.js";
 import { isDraining } from "./shutdown.js";
 import { rateLimiter } from "./ratelimit.js";
@@ -47,10 +48,11 @@ const socketIp = (request: FastifyRequest): string => {
   return raw.startsWith("::ffff:") ? raw.slice(7) : raw;
 };
 
-export const wsRoutes: FastifyPluginAsync<{ registry: SessionRegistry; admission: AdmissionStore }> = async (
-  app,
-  { registry, admission },
-) => {
+export const wsRoutes: FastifyPluginAsync<{
+  registry: SessionRegistry;
+  admission: AdmissionStore;
+  pool: WarmPool;
+}> = async (app, { registry, admission, pool }) => {
   app.addHook("onClose", async () => {
     admission.dispose();
     registry.dispose();
@@ -133,15 +135,20 @@ export const wsRoutes: FastifyPluginAsync<{ registry: SessionRegistry; admission
         return;
       }
       incCounter("session_creates_total");
-      let session: Session;
-      try {
-        session = registry.create(80, 24);
-      } catch (err) {
-        admission.release(state.visitor);
-        incCounter("rejections_total", { code: "spawn_failed" });
-        app.log.error({ err }, "session spawn failed");
-        send({ type: "error", code: "spawn_failed", message: "failed to start the shell container" });
-        return;
+      // Pool first: a warm shell skips the zsh/docker boot entirely; the
+      // cold path (registry.create) is today's original flow. Both respect
+      // the max-sessions invariant — admission already charged this create.
+      let session: Session | null = pool.take();
+      if (session === null) {
+        try {
+          session = registry.create(80, 24);
+        } catch (err) {
+          admission.release(state.visitor);
+          incCounter("rejections_total", { code: "spawn_failed" });
+          app.log.error({ err }, "session spawn failed");
+          send({ type: "error", code: "spawn_failed", message: "failed to start the shell container" });
+          return;
+        }
       }
       session.visitorId = state.visitor;
       bind(session);
