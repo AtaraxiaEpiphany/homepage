@@ -27,6 +27,18 @@ export const config = {
   reattachGraceMs: int("REATTACH_GRACE_MS", 30_000),
   /** Shutdown budget (ms): refuse new sessions, let live ones drain, then kill. */
   drainTimeoutMs: int("DRAIN_TIMEOUT_MS", 10_000),
+  /**
+   * Abuse floor (per raw socket IP — never forwarded headers): create
+   * throttle, auth-failure lockout, concurrent-WS cap. Behind a proxy all
+   * visitors share one bucket on purpose; RATE_LIMIT_DISABLED=1 lifts the
+   * floor entirely (private deployments behind an auth proxy).
+   */
+  createRatePerMin: int("CREATE_RATE_PER_MIN", 6),
+  createRateBurst: int("CREATE_RATE_BURST", 6),
+  authMaxFailures: int("AUTH_MAX_FAILURES", 5),
+  authLockoutMs: int("AUTH_LOCKOUT_MS", 60_000),
+  maxWsPerIp: int("MAX_WS_PER_IP", 8),
+  rateLimitDisabled: process.env.RATE_LIMIT_DISABLED === "1",
   /** Read-only content jail exposed to the shell and the /api/file* routes. */
   contentDir: path.resolve(process.env.CONTENT_DIR ?? path.join(REPO_ROOT, "content")),
   image: process.env.IMAGE ?? "homepage-shell:latest",
