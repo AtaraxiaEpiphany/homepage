@@ -94,7 +94,10 @@ each instance then joins the broker:
   `{granted, ticket, endpoint}` or `{queued, ticket, position}`; the client
   then connects to the endpoint and opens its WS with `create{ticket}`, which
   the host redeems. `GET /api/queue/:ticket` polls position/grant;
-  `GET /api/hosts` is an ops view of who is alive and how loaded. Set
+  `GET /api/hosts` is an ops view of who is alive and how loaded. The two ops
+  endpoints (`/api/hosts`, `/api/metrics`) are not public surface: they
+  require `Authorization: Bearer <OPS_TOKEN>`, falling back to `WS_TOKEN`
+  when `OPS_TOKEN` is unset. Set
   `CORS_ORIGINS` to the site's origin when you front the broker publicly —
   the API tightens from reflect-any to the allowlist the moment the variable
   is set.
