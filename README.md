@@ -14,7 +14,7 @@ A full-page light terminal as the homepage, backed by a **real shell** (zsh + fz
 - **Ctrl+P / Ctrl+Shift+P / ⌘P / ⌘⇧P**: VS Code-style command palette — fuzzy-search commands and `content/` files, shows recently opened; Enter routes markdown to the viewer, commands go to the real shell. Bound at the page level, so it works without focusing the terminal first. The page keeps Ctrl+P for the palette, so shell previous-history lives on ↑ / Ctrl-R (inside the fzf picker, navigate with the arrows or Ctrl-J/K).
 - **Welcome screen**: the motd doubles as the site's hero — a one-line tagline and a quickstart (`open hello.md`, `demo`, `theme dark`, `status`) with the key hints, printed once per shell in English.
 - When the backend is unreachable an offline overlay appears (startup hints + retry button), with exponential-backoff reconnects; reloading reattaches to a still-live session.
-- **Concurrency ladder**: a warm pool pre-spawns shells so creates land in ~20ms; when capacity is full visitors queue in a waiting room (live position, fairness keyed by a per-browser token); per-IP floors throttle create spam, auth-failure lockout and connection caps; grace/idle timeouts tighten under saturation; `/api/metrics` exposes the counters. Pool shells count inside `MAX_SESSIONS`, so the worst-case host load is unchanged.
+- **Concurrency ladder**: a warm pool pre-spawns shells so creates land in ~20ms; when capacity is full visitors queue in a waiting room (live position, fairness keyed by a per-browser token); per-IP floors throttle create spam, auth-failure lockout and connection caps; grace/idle timeouts tighten under saturation; `/api/metrics` exposes the counters. Pool shells count inside `MAX_SESSIONS`, so the worst-case host load is unchanged. With `BROKER_REDIS_URL` set, several hosts share one waiting room through redis — a saturated host's queued visitors are granted on whichever host drains next (see *Broker mode* below).
 - **Demo replay fallback**: when the queue runs deep or admission rejects, the overlay plays `content/replay.cast` (asciinema v2, served from the content jail) into a small read-only terminal so waiting visitors see what the shell does; the cast is optional and deployments without one just skip it.
 
 ## Architecture
@@ -68,6 +68,46 @@ The backend is a host process (it needs `docker run`), so Pages cannot host it �
 - **Private mode**: `WS_TOKEN` set. Clients must send the token as the first WebSocket message (the legacy `?token=` query form is gone — it leaked the token into request logs); without it they see the offline overlay. Build the frontend with `VITE_WS_TOKEN` set to the same value. Caveat: that token is baked into the shipped JS bundle, so private mode only makes sense with private frontend hosting.
 
 Without `VITE_WS_URL` the site still deploys and just shows the offline overlay.
+
+### Broker mode (multi-host waiting room)
+
+One host is a ceiling (`MAX_SESSIONS` per machine). To run several hosts behind
+one public origin, point them all at a shared redis with `BROKER_REDIS_URL` —
+each instance then joins the broker:
+
+- **Capacity stays per-host.** Redis holds only the control plane: the global
+  waiting-room queue (`hp:queue`), admission tickets (`hp:ticket:<t>`), visitor
+  budgets (`hp:visitor:<id>`) and a presence heartbeat (`hp:hosts`, 5s tick, a
+  host reads as gone after 15s). Session data-plane traffic stays
+  client↔host WebSocket direct; session secrets never touch redis.
+- **Any host drains when it has room.** A saturated host answers client
+  preflights with a waiting-room ticket; whichever host finds local headroom
+  next grants the ticket against *its own* capacity, stamping the ticket with
+  its `HOST_PUBLIC_URL` (or none — clients then stay on the same public
+  origin, which is what you want when a reverse proxy fronts all hosts).
+- **The control plane is plain HTTP**: `POST /api/admit` →
+  `{granted, ticket, endpoint}` or `{queued, ticket, position}`; the client
+  then connects to the endpoint and opens its WS with `create{ticket}`, which
+  the host redeems. `GET /api/queue/:ticket` polls position/grant;
+  `GET /api/hosts` is an ops view of who is alive and how loaded. Set
+  `CORS_ORIGINS` to the site's origin when you front the broker publicly —
+  the API tightens from reflect-any to the allowlist the moment the variable
+  is set.
+- **Old clients keep working** unchanged: a WS `create` without a ticket falls
+  back to the answering host's own hard cap and local waiting room.
+- Dead hosts self-heal: their heartbeat ages out (≤20s), queue tickets expire,
+  and leaked visitor-budget counters expire within an hour.
+
+Locally, the two-host shape is:
+
+```sh
+docker run -d --rm -p 6399:6379 redis:7-alpine
+BROKER_REDIS_URL=redis://127.0.0.1:6399 HOST_ID=a WS_PORT=8787 npm run start -w apps/shell-server
+BROKER_REDIS_URL=redis://127.0.0.1:6399 HOST_ID=b WS_PORT=8788 npm run start -w apps/shell-server
+```
+
+The frontend's broker pre-flight (`VITE_BROKER_URL`) is optional and ships in
+a follow-up; without it, direct-WS visitors still queue — just per-host.
 
 ## Content
 
