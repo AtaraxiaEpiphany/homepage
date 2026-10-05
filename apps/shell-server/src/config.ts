@@ -21,6 +21,12 @@ export const config = {
   host: process.env.WS_HOST ?? "127.0.0.1",
   /** Shared secret for WS auth. Empty string = public mode, loopback-only (see guard below). */
   token: process.env.WS_TOKEN ?? "",
+  /**
+   * Shared secret for the ops endpoints (/api/hosts, /api/metrics), sent as
+   * `Authorization: Bearer <token>`. Empty falls back to WS_TOKEN; both empty
+   * (dev, loopback-only server) leaves the ops endpoints open like the rest.
+   */
+  opsToken: process.env.OPS_TOKEN || process.env.WS_TOKEN || "",
   maxSessions: int("MAX_SESSIONS", 4),
   /** Kill a session idle this long (ms), after a warning written into the PTY. */
   idleTimeoutMs: int("IDLE_TIMEOUT_MS", 30 * 60_000),

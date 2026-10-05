@@ -15,6 +15,7 @@ import { sanitizeVisitor } from "./ws.js";
 import { rateLimiter } from "./ratelimit.js";
 import { isDraining } from "./shutdown.js";
 import { incCounter } from "./metrics.js";
+import { opsGuard } from "./opsauth.js";
 
 export interface BrokerOptions {
   redis: RedisClientType;
@@ -150,7 +151,7 @@ export const brokerRoutes: FastifyPluginAsync<BrokerOptions> = async (app, opts)
   });
 
   /** Ops view: which hosts are alive and how loaded (freshness per record). */
-  app.get("/api/hosts", async () => {
+  app.get("/api/hosts", { preHandler: opsGuard }, async () => {
     const all = await redis.hGetAll(HOSTS_KEY);
     const now = Date.now();
     const hosts = Object.entries(all).map(([id, raw]) => {

@@ -9,6 +9,7 @@ import { fileRoutes } from "./files.js";
 import { render } from "./metrics.js";
 import { installShutdown } from "./shutdown.js";
 import { createAdmission } from "./admission/index.js";
+import { opsGuard } from "./opsauth.js";
 const app = Fastify({
   logger: true,
   bodyLimit: 4 * 1024 * 1024,
@@ -60,7 +61,7 @@ app.addHook("onClose", async () => {
 
 app.get("/api/health", async () => ({ ok: true }));
 
-app.get("/api/metrics", async (_req, reply) => {
+app.get("/api/metrics", { preHandler: opsGuard }, async (_req, reply) => {
   reply.type("text/plain; version=0.0.4; charset=utf-8").send(render());
 });
 
