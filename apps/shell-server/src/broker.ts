@@ -88,8 +88,12 @@ export const brokerRoutes: FastifyPluginAsync<BrokerOptions> = async (app, opts)
 
     const verdict = await store.tryAcquire(visitor);
     if (verdict.verdict === "admit") {
-      // Reserved here, redeemed over WS. If the client never shows up the
-      // ticket expires; the budget charge happens at redeem, not here.
+      // Reserved here, redeemed over WS. tryAcquire's budget charge is undone
+      // immediately — the authoritative charge happens at redeem, when a
+      // shell is actually handed out (an unredeemed ticket must not eat the
+      // visitor's budget for an hour). The check above was the early
+      // visitor_limit signal; capacity self-corrects at redeem.
+      store.release(visitor);
       const ticket = randomUUID();
       await redis.set(
         TICKET_KEY(ticket),
