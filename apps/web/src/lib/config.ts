@@ -19,4 +19,4 @@ export const WS_TOKEN: string = env.VITE_WS_TOKEN || "";
 export const API_URL: string =
   env.VITE_API_URL || (env.DEV ? "" : "");
 
-export type ConnState = "connecting" | "online" | "offline";
+export type ConnState = "connecting" | "online" | "offline" | "queued";

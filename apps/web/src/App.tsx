@@ -66,8 +66,13 @@ export default function App() {
               <p className="offline-title">
                 {conn === "connecting"
                   ? OFFLINE_HINTS.connecting
-                  : "shell backend offline"}
+                  : conn === "queued"
+                    ? "waiting for a shell…"
+                    : "shell backend offline"}
               </p>
+              {conn === "queued" && (
+                <p className="offline-detail">{detail ?? "queued"}</p>
+              )}
               {conn === "offline" && (
                 <>
                   <p className="offline-detail">{detail ?? "backend unreachable"}</p>

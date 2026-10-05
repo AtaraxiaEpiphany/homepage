@@ -160,6 +160,17 @@ export class ShellClient {
         }
         break;
       }
+      case "queued": {
+        // Waiting-room ticket. Pings continue so proxies don't drop an
+        // "idle" connection while it holds the queue spot.
+        this.setState("queued", `position ${msg.position}`);
+        this.startPings();
+        break;
+      }
+      case "queue_update": {
+        if (this.state === "queued") this.setState("queued", `position ${msg.position}`);
+        break;
+      }
       case "exit": {
         sessionStorage.removeItem(SESSION_KEY);
         this.onExit(msg.exitCode);
