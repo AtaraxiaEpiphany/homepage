@@ -51,6 +51,10 @@ export class ShellClient {
   private queuePoll: number | null = null;
   /** Bumped by restart()/dispose() so in-flight preflight/poll steps no-op. */
   private preflightGen = 0;
+  /** Current WS dialed into a saved session (reattach attempt). */
+  private targetIsStored = false;
+  /** Consecutive failed reattach dials — 2 in a row drops the stale entry. */
+  private storedFailures = 0;
 
   onState: (state: ConnState, detail?: string) => void = () => {};
   onOutput: (data: Uint8Array) => void = () => {};
@@ -84,7 +88,10 @@ export class ShellClient {
   /**
    * Session id + secret from sessionStorage, or null. Shape-validating: a
    * pre-secret entry (bare session id) fails the check and is dropped, which
-   * migrates old tabs to the new format on their next reload.
+   * migrates old tabs to the new format on their next reload. Host-scoped:
+   * an entry carrying an `endpoint` reattaches only on that host — the
+   * secret means nothing elsewhere — while endpoint-less (same-origin/
+   * legacy) entries ride this build's default target.
    */
   private readStored(): StoredSession | null {
     const raw = sessionStorage.getItem(SESSION_KEY);
@@ -92,7 +99,14 @@ export class ShellClient {
     try {
       const parsed = JSON.parse(raw) as Partial<StoredSession>;
       if (typeof parsed.id === "string" && typeof parsed.secret === "string") {
-        return { id: parsed.id, secret: parsed.secret };
+        if (parsed.endpoint === undefined) {
+          if (WS_URL !== "") return { id: parsed.id, secret: parsed.secret };
+        } else if (
+          typeof parsed.endpoint === "string" &&
+          /^wss?:\/\//.test(parsed.endpoint)
+        ) {
+          return { id: parsed.id, secret: parsed.secret, endpoint: parsed.endpoint };
+        }
       }
     } catch {
       // fall through to removal
@@ -112,7 +126,13 @@ export class ShellClient {
     const saved = this.readStored();
     if (saved) {
       // Reattach is never admission-gated — the grace window exists for it.
-      this.openSessionWs(WS_URL, null, saved);
+      // The stored endpoint routes back to the granting host.
+      const target = saved.endpoint ?? WS_URL;
+      if (!target) {
+        this.setState("offline", "session host unknown and VITE_WS_URL is unset");
+        return;
+      }
+      this.openSessionWs(target, null, saved);
       return;
     }
     if (BROKER_URL) {
@@ -203,6 +223,7 @@ export class ShellClient {
   private openSessionWs(target: string, ticket: string | null, saved: StoredSession | null): void {
     this.stopQueuePoll();
     this.wsTarget = target;
+    this.targetIsStored = saved !== null;
     this.setState("connecting");
     const ws = new WebSocket(target);
     ws.binaryType = "arraybuffer";
@@ -251,6 +272,18 @@ export class ShellClient {
         this.setState("offline", "session taken over by another window — retry for a fresh shell");
         return;
       }
+      if (this.targetIsStored) {
+        // A saved-host dial that didn't come online. One retry (grace window
+        // may still hold the session); a second failure means the host is
+        // gone — drop the entry and line up through the broker instead of
+        // knocking on a dead door forever.
+        this.storedFailures += 1;
+        if (this.storedFailures >= 2) {
+          this.storedFailures = 0;
+          this.targetIsStored = false;
+          sessionStorage.removeItem(SESSION_KEY);
+        }
+      }
       this.setState("offline");
       this.scheduleReconnect();
     };
@@ -264,6 +297,7 @@ export class ShellClient {
     switch (msg.type) {
       case "created": {
         this.persistSession(msg.sessionId, msg.secret);
+        this.storedFailures = 0;
         this.backoffMs = 500;
         this.setPressure(false);
         this.setState("online");
@@ -273,6 +307,7 @@ export class ShellClient {
       }
       case "attached": {
         if (msg.ok) {
+          this.storedFailures = 0;
           this.backoffMs = 500;
           this.setPressure(false);
           this.setState("online");
@@ -389,6 +424,8 @@ export class ShellClient {
     sessionStorage.removeItem(SESSION_KEY);
     this.backoffMs = 500;
     this.preflightGen += 1; // in-flight admit/poll results are stale now
+    this.targetIsStored = false;
+    this.storedFailures = 0;
     this.stopQueuePoll();
     if (this.reconnectTimer !== null) {
       clearTimeout(this.reconnectTimer);
