@@ -1,5 +1,5 @@
 import type { C2S, S2C } from "@homepage/shared";
-import { WS_TOKEN, WS_URL, type ConnState } from "../lib/config.js";
+import { PRESSURE_CODES, REPLAY_AFTER_POSITION, WS_TOKEN, WS_URL, type ConnState } from "../lib/config.js";
 import { getVisitor } from "../lib/visitor.js";
 
 const SESSION_KEY = "homepage:sessionId";
@@ -42,6 +42,17 @@ export class ShellClient {
     uptimeSec: number;
     image: string;
   }) => void = () => {};
+  /** Admission pressure flipped on/off — the overlay offers the demo replay. */
+  onPressure: (active: boolean) => void = () => {};
+
+  private pressure = false;
+
+  private setPressure(active: boolean): void {
+    if (this.pressure !== active) {
+      this.pressure = active;
+      this.onPressure(active);
+    }
+  }
 
   private setState(state: ConnState, detail?: string): void {
     if (this.state !== state) {
@@ -109,6 +120,7 @@ export class ShellClient {
 
     ws.onclose = (ev) => {
       this.stopPings();
+      this.setPressure(false); // a dead backend can't serve the replay either
       if (this.disposed) return;
       if (this.restartPending) {
         this.restartPending = false;
@@ -143,6 +155,7 @@ export class ShellClient {
           JSON.stringify({ id: msg.sessionId, secret: msg.secret }),
         );
         this.backoffMs = 500;
+        this.setPressure(false);
         this.setState("online");
         this.startPings();
         if (this.pendingResize) this.send({ type: "resize", ...this.pendingResize });
@@ -151,6 +164,7 @@ export class ShellClient {
       case "attached": {
         if (msg.ok) {
           this.backoffMs = 500;
+          this.setPressure(false);
           this.setState("online");
           this.startPings();
           if (this.pendingResize) this.send({ type: "resize", ...this.pendingResize });
@@ -164,6 +178,7 @@ export class ShellClient {
         // Waiting-room ticket. Pings continue so proxies don't drop an
         // "idle" connection while it holds the queue spot.
         this.setState("queued", `position ${msg.position}`);
+        this.setPressure(msg.position > REPLAY_AFTER_POSITION);
         this.startPings();
         break;
       }
@@ -171,6 +186,7 @@ export class ShellClient {
         // position 0 = about to be granted; `created` lands momentarily.
         if (this.state === "queued" && msg.position > 0) {
           this.setState("queued", `position ${msg.position}`);
+          this.setPressure(msg.position > REPLAY_AFTER_POSITION);
         }
         break;
       }
@@ -195,6 +211,7 @@ export class ShellClient {
         if (this.state !== "online") {
           this.setState("offline", `${msg.code}: ${msg.message}`);
         }
+        this.setPressure(PRESSURE_CODES.has(msg.code));
         break;
       }
       case "pong":

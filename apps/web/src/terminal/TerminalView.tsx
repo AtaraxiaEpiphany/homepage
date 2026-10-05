@@ -11,6 +11,7 @@ interface Props {
   clientRef: (client: ShellClient) => void;
   onOpenPath: (rel: string) => void;
   onPalette: () => void;
+  onPressure: (active: boolean) => void;
   focusRef: { current: (() => void) | null };
   blurRef: { current: (() => void) | null };
 }
@@ -21,7 +22,7 @@ interface Props {
  * Intercepts OSC 7770 — the shell's control channel (`open` pops the viewer,
  * `theme` swaps the page palette, `status` prints server stats).
  */
-export function TerminalView({ onState, clientRef, onOpenPath, onPalette, focusRef, blurRef }: Props) {
+export function TerminalView({ onState, clientRef, onOpenPath, onPalette, onPressure, focusRef, blurRef }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
 
@@ -83,6 +84,7 @@ export function TerminalView({ onState, clientRef, onOpenPath, onPalette, focusR
         `\r\n\x1b[38;5;244m[server] sessions ${s.sessions}/${s.maxSessions} · uptime ${up} · image ${s.image}\x1b[0m`,
       );
     };
+    client.onPressure = onPressure;
     clientRef(client);
     client.connect();
     termRef.current = term;

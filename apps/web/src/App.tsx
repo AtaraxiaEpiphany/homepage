@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { TerminalView } from "./terminal/TerminalView.js";
 import type { ShellClient } from "./terminal/wsClient.js";
+import { ReplayPanel } from "./terminal/ReplayPanel.js";
 import { MarkdownViewer } from "./viewer/MarkdownViewer.js";
 import { CommandPalette } from "./palette/CommandPalette.js";
 import { pushRecent } from "./lib/api.js";
@@ -13,6 +14,7 @@ const OFFLINE_HINTS: Record<string, string> = {
 export default function App() {
   const [conn, setConn] = useState<ConnState>("connecting");
   const [detail, setDetail] = useState<string | undefined>();
+  const [pressure, setPressure] = useState(false);
   const [client, setClient] = useState<ShellClient | null>(null);
   const [viewerPath, setViewerPath] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -24,6 +26,7 @@ export default function App() {
     setDetail(d);
   }, []);
   const onClient = useCallback((c: ShellClient) => setClient(c), []);
+  const onPressure = useCallback((active: boolean) => setPressure(active), []);
 
   const openPath = useCallback((rel: string) => {
     // Blur the terminal first: if xterm keeps focus it also sees the closing
@@ -58,6 +61,7 @@ export default function App() {
             clientRef={onClient}
             onOpenPath={openPath}
             onPalette={() => setPaletteOpen(true)}
+            onPressure={onPressure}
             focusRef={focusTerminal}
             blurRef={blurTerminal}
           />
@@ -80,10 +84,13 @@ export default function App() {
                     local start: <code>docker compose build shell</code> then{" "}
                     <code>npm run dev:server</code>
                   </p>
-                  <button className="offline-retry" onClick={() => client?.restart()}>
-                    retry now
-                  </button>
                 </>
+              )}
+              {pressure && <ReplayPanel onJoin={() => client?.restart()} />}
+              {conn === "offline" && !pressure && (
+                <button className="offline-retry" onClick={() => client?.restart()}>
+                  retry now
+                </button>
               )}
             </div>
           )}

@@ -287,6 +287,34 @@ body {
   color: #fff;
 }
 
+/* --- demo replay (shown under admission pressure) --- */
+
+.replay-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.replay-host {
+  width: min(640px, 82vw);
+  padding: 8px 10px;
+  border: 1px solid var(--code-bg);
+  border-radius: 6px;
+  background: var(--code-bg);
+  overflow: hidden;
+}
+:root[data-theme="dark"] .replay-host {
+  border-color: #2a2e36;
+}
+
+.replay-host .xterm {
+  pointer-events: none; /* read-only: all input belongs to the real shell */
+}
+
 /* --- viewer overlay (open <path>) --- */
 
 .viewer {

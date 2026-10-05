@@ -20,3 +20,12 @@ export const API_URL: string =
   env.VITE_API_URL || (env.DEV ? "" : "");
 
 export type ConnState = "connecting" | "online" | "offline" | "queued";
+
+/**
+ * Queue depth at which the overlay starts playing the demo replay alongside
+ * the position counter — deep enough that waiting looks likely.
+ */
+export const REPLAY_AFTER_POSITION = 2;
+
+/** Admission outcomes that mean "the visitor is stuck at the door". */
+export const PRESSURE_CODES = new Set(["server_full", "queue_full", "queue_timeout", "visitor_limit"]);
