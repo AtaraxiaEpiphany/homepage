@@ -19,6 +19,14 @@ export const WS_TOKEN: string = env.VITE_WS_TOKEN || "";
 export const API_URL: string =
   env.VITE_API_URL || (env.DEV ? "" : "");
 
+/**
+ * Broker pre-flight endpoint (multi-host deployments): the base URL of a
+ * broker-enabled shell host, e.g. `https://shells.example.com`. Empty keeps
+ * the connection flow byte-identical to single-host (WS first, queue held
+ * server-side over that WS).
+ */
+export const BROKER_URL: string = env.VITE_BROKER_URL || "";
+
 export type ConnState = "connecting" | "online" | "offline" | "queued";
 
 /**

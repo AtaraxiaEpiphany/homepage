@@ -1,5 +1,13 @@
 import type { C2S, S2C } from "@homepage/shared";
-import { PRESSURE_CODES, REPLAY_AFTER_POSITION, WS_TOKEN, WS_URL, type ConnState } from "../lib/config.js";
+import {
+  BROKER_URL,
+  PRESSURE_CODES,
+  REPLAY_AFTER_POSITION,
+  WS_TOKEN,
+  WS_URL,
+  type ConnState,
+} from "../lib/config.js";
+import { admit, endpointToWsUrl, pollQueue, POLL_MS } from "../lib/broker.js";
 import { getVisitor } from "../lib/visitor.js";
 
 const SESSION_KEY = "homepage:sessionId";
@@ -8,6 +16,8 @@ const SESSION_KEY = "homepage:sessionId";
 interface StoredSession {
   id: string;
   secret: string;
+  /** WS URL the session lives on (broker mode). Absent = same-origin/legacy. */
+  endpoint?: string;
 }
 
 /**
@@ -20,6 +30,10 @@ interface StoredSession {
  *   create. Auth failures (4401) and takeovers (4409) never auto-reconnect:
  *   a retry cannot succeed, and re-attaching after a takeover would fight
  *   the winner.
+ * - Broker mode (VITE_BROKER_URL set, no saved session): POST /api/admit
+ *   first — a grant names the host to connect to; a queue ticket is polled
+ *   over HTTP until some host grants. Unset, the flow is unchanged: WS
+ *   first, waiting room held server-side on the socket.
  */
 export class ShellClient {
   private ws: WebSocket | null = null;
@@ -31,6 +45,12 @@ export class ShellClient {
   private pendingResize: { cols: number; rows: number } | null = null;
   /** Set by restart() so onclose reconnects immediately instead of backing off. */
   private restartPending = false;
+  /** WS URL of the current/target session — persisted with the session. */
+  private wsTarget: string = WS_URL;
+  /** Queue-ticket polling timer (broker mode). */
+  private queuePoll: number | null = null;
+  /** Bumped by restart()/dispose() so in-flight preflight/poll steps no-op. */
+  private preflightGen = 0;
 
   onState: (state: ConnState, detail?: string) => void = () => {};
   onOutput: (data: Uint8Array) => void = () => {};
@@ -85,12 +105,106 @@ export class ShellClient {
   // after construction, and the no-backend path fires onState synchronously.
   connect(): void {
     if (this.disposed) return;
-    if (!WS_URL) {
+    if (!WS_URL && !BROKER_URL) {
       this.setState("offline", "VITE_WS_URL is not configured for this build");
       return;
     }
+    const saved = this.readStored();
+    if (saved) {
+      // Reattach is never admission-gated — the grace window exists for it.
+      this.openSessionWs(WS_URL, null, saved);
+      return;
+    }
+    if (BROKER_URL) {
+      void this.preflight();
+      return;
+    }
+    this.openSessionWs(WS_URL, null, null);
+  }
+
+  /** Broker pre-flight: reserve a slot or take a queue ticket. */
+  private async preflight(): Promise<void> {
+    const gen = ++this.preflightGen;
     this.setState("connecting");
-    const ws = new WebSocket(WS_URL);
+    const res = await admit(getVisitor());
+    if (this.disposed || gen !== this.preflightGen) return;
+    switch (res.kind) {
+      case "granted": {
+        const target = res.endpoint ? endpointToWsUrl(res.endpoint) : WS_URL;
+        if (!target) {
+          this.setState("offline", "broker granted no endpoint and VITE_WS_URL is unset");
+          return;
+        }
+        this.openSessionWs(target, res.ticket, null);
+        return;
+      }
+      case "queued":
+        this.setState("queued", `position ${res.position}`);
+        this.setPressure(res.position > REPLAY_AFTER_POSITION);
+        this.startQueuePoll(res.ticket, gen);
+        return;
+      case "rejected":
+        this.setState("offline", `${res.code}: admission rejected`);
+        this.setPressure(PRESSURE_CODES.has(res.code));
+        return;
+      case "unavailable":
+        this.setState("offline", "broker unreachable");
+        this.scheduleReconnect();
+        return;
+    }
+  }
+
+  /** Poll the broker while queued; a grant opens the session WS. */
+  private startQueuePoll(ticket: string, gen: number): void {
+    this.stopQueuePoll();
+    const tick = async (): Promise<void> => {
+      if (this.disposed || gen !== this.preflightGen || this.state !== "queued") return;
+      const res = await pollQueue(ticket);
+      if (this.disposed || gen !== this.preflightGen || this.state !== "queued") return;
+      switch (res.kind) {
+        case "granted": {
+          this.stopQueuePoll();
+          const target = res.endpoint ? endpointToWsUrl(res.endpoint) : WS_URL;
+          if (!target) {
+            this.setState("offline", "broker granted no endpoint and VITE_WS_URL is unset");
+            return;
+          }
+          this.setPressure(false);
+          this.openSessionWs(target, ticket, null);
+          return;
+        }
+        case "queued":
+          this.setState("queued", `position ${res.position}`);
+          this.setPressure(res.position > REPLAY_AFTER_POSITION);
+          break;
+        case "expired":
+          // Ticket TTL'd out (broker restart, redis flush) — take a new one.
+          void this.preflight();
+          return;
+        case "unavailable":
+          break; // broker hiccup — keep polling
+      }
+      this.queuePoll = window.setTimeout(() => void tick(), POLL_MS);
+    };
+    this.queuePoll = window.setTimeout(() => void tick(), POLL_MS);
+  }
+
+  private stopQueuePoll(): void {
+    if (this.queuePoll !== null) {
+      clearTimeout(this.queuePoll);
+      this.queuePoll = null;
+    }
+  }
+
+  /**
+   * Open (or re-open) the session WebSocket. `ticket` rides a fresh create
+   * (broker redemption); `saved` reconnects to an existing session.
+   */
+  private openSessionWs(target: string, ticket: string | null, saved: StoredSession | null): void {
+    this.stopQueuePoll();
+    this.wsTarget = target;
+    this.setState("connecting");
+    const ws = new WebSocket(target);
     ws.binaryType = "arraybuffer";
     this.ws = ws;
 
@@ -101,11 +215,10 @@ export class ShellClient {
       // blocked, and the server treats us as budget-exempt.
       const visitor = getVisitor();
       if (WS_TOKEN) this.send({ type: "auth", token: WS_TOKEN, visitor });
-      const saved = this.readStored();
       if (saved) {
         this.send({ type: "attach", sessionId: saved.id, secret: saved.secret });
       } else {
-        this.send({ type: "create", visitor });
+        this.send({ type: "create", visitor, ...(ticket ? { ticket } : {}) });
         this.startPings();
       }
     };
@@ -150,10 +263,7 @@ export class ShellClient {
   private onControl(msg: S2C): void {
     switch (msg.type) {
       case "created": {
-        sessionStorage.setItem(
-          SESSION_KEY,
-          JSON.stringify({ id: msg.sessionId, secret: msg.secret }),
-        );
+        this.persistSession(msg.sessionId, msg.secret);
         this.backoffMs = 500;
         this.setPressure(false);
         this.setState("online");
@@ -175,8 +285,9 @@ export class ShellClient {
         break;
       }
       case "queued": {
-        // Waiting-room ticket. Pings continue so proxies don't drop an
-        // "idle" connection while it holds the queue spot.
+        // Waiting-room ticket (WS-held queue, single-host mode). Pings
+        // continue so proxies don't drop an "idle" connection while it holds
+        // the queue spot.
         this.setState("queued", `position ${msg.position}`);
         this.setPressure(msg.position > REPLAY_AFTER_POSITION);
         this.startPings();
@@ -217,6 +328,15 @@ export class ShellClient {
       case "pong":
         break;
     }
+  }
+
+  /** Keep same-origin sessions in the legacy shape; only broker-granted hosts add `endpoint`. */
+  private persistSession(id: string, secret: string): void {
+    const stored: StoredSession =
+      this.wsTarget && this.wsTarget !== WS_URL
+        ? { id, secret, endpoint: this.wsTarget }
+        : { id, secret };
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(stored));
   }
 
   private scheduleReconnect(): void {
@@ -268,6 +388,8 @@ export class ShellClient {
   restart(): void {
     sessionStorage.removeItem(SESSION_KEY);
     this.backoffMs = 500;
+    this.preflightGen += 1; // in-flight admit/poll results are stale now
+    this.stopQueuePoll();
     if (this.reconnectTimer !== null) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -285,6 +407,8 @@ export class ShellClient {
 
   dispose(): void {
     this.disposed = true;
+    this.preflightGen += 1;
+    this.stopQueuePoll();
     this.stopPings();
     if (this.reconnectTimer !== null) clearTimeout(this.reconnectTimer);
     this.ws?.close();
