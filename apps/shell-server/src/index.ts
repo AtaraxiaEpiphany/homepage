@@ -7,6 +7,7 @@ import { wsRoutes } from "./ws.js";
 import { fileRoutes } from "./files.js";
 import { render } from "./metrics.js";
 import { installShutdown } from "./shutdown.js";
+import { createAdmission } from "./admission/index.js";
 
 const app = Fastify({
   logger: true,
@@ -18,10 +19,11 @@ const registry = new SessionRegistry(
   config.reattachGraceMs,
   config.idleTimeoutMs,
 );
+const admission = createAdmission(() => registry.size);
 
 await app.register(cors, { origin: true });
 await app.register(websocket);
-await app.register(wsRoutes, { registry });
+await app.register(wsRoutes, { registry, admission });
 await app.register(fileRoutes);
 
 app.get("/api/health", async () => ({ ok: true }));

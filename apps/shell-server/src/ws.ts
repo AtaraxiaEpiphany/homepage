@@ -7,6 +7,7 @@ import { Session, SessionRegistry } from "./session.js";
 import { incCounter } from "./metrics.js";
 import { isDraining } from "./shutdown.js";
 import { rateLimiter } from "./ratelimit.js";
+import type { AdmissionStore, QueueHandle } from "./admission/index.js";
 
 const MAX_CONTROL_FRAME = 64 * 1024; // JSON text frames
 const MAX_INPUT_FRAME = 1024 * 1024; // raw stdin bytes (paste guard)
@@ -30,6 +31,8 @@ interface ConnState {
   ip: string;
   /** Visitor fairness key from `auth`/`create`, once a valid one arrives. */
   visitor: string | null;
+  /** Live waiting-room ticket, if this connection is queued for a slot. */
+  queueHandle: QueueHandle | null;
 }
 
 /** Visitor tokens are opaque server-side; shape-check only. */
@@ -44,8 +47,28 @@ const socketIp = (request: FastifyRequest): string => {
   return raw.startsWith("::ffff:") ? raw.slice(7) : raw;
 };
 
-export const wsRoutes: FastifyPluginAsync<{ registry: SessionRegistry }> = async (app, { registry }) => {
-  app.addHook("onClose", async () => registry.dispose());
+export const wsRoutes: FastifyPluginAsync<{ registry: SessionRegistry; admission: AdmissionStore }> = async (
+  app,
+  { registry, admission },
+) => {
+  app.addHook("onClose", async () => {
+    admission.dispose();
+    registry.dispose();
+  });
+
+  // Session ends are the single admission refund path: charge happens at
+  // admit/grant, this fires exactly once per created session's shell exit.
+  registry.onSessionEnd = (s) => admission.release(s.visitorId);
+
+  // Fan queue positions out to every waiting connection on any change.
+  const queuedConns = new Set<{ state: ConnState; send: (msg: S2C) => void }>();
+  admission.onDepthChange(() => {
+    for (const conn of queuedConns) {
+      if (conn.state.queueHandle) {
+        conn.send({ type: "queue_update", position: conn.state.queueHandle.position() });
+      }
+    }
+  });
 
   app.get("/ws", { websocket: true }, (socketRaw: WebSocket, request: FastifyRequest) => {
     // First-frame token auth. The browser WebSocket API cannot set headers,
@@ -53,7 +76,7 @@ export const wsRoutes: FastifyPluginAsync<{ registry: SessionRegistry }> = async
     // which also keeps it out of request logs. Everything but `auth` is
     // ignored until the handshake lands; silence or abuse closes 4401.
     const ip = socketIp(request);
-    const state: ConnState = { session: null, authed: !config.token, ip, visitor: null };
+    const state: ConnState = { session: null, authed: !config.token, ip, visitor: null, queueHandle: null };
     socketRaw.binaryType = "nodebuffer";
     incCounter("ws_connections_total");
 
@@ -92,6 +115,37 @@ export const wsRoutes: FastifyPluginAsync<{ registry: SessionRegistry }> = async
         },
         readyState: socketRaw.readyState,
       });
+    };
+
+    // The tail of every create path (direct admit or queue grant). Capacity
+    // was charged by admission before this runs — every refusal here refunds.
+    const finishCreate = () => {
+      if (isDraining()) {
+        admission.release(state.visitor);
+        incCounter("rejections_total", { code: "draining" });
+        send({ type: "error", code: "draining", message: "server is shutting down — retry shortly" });
+        return;
+      }
+      if (state.session && !state.session.exited) {
+        admission.release(state.visitor);
+        incCounter("rejections_total", { code: "busy" });
+        send({ type: "error", code: "busy", message: "connection already owns a session" });
+        return;
+      }
+      incCounter("session_creates_total");
+      let session: Session;
+      try {
+        session = registry.create(80, 24);
+      } catch (err) {
+        admission.release(state.visitor);
+        incCounter("rejections_total", { code: "spawn_failed" });
+        app.log.error({ err }, "session spawn failed");
+        send({ type: "error", code: "spawn_failed", message: "failed to start the shell container" });
+        return;
+      }
+      session.visitorId = state.visitor;
+      bind(session);
+      send({ type: "created", sessionId: session.id, secret: session.secret });
     };
 
     socketRaw.on("message", (data: Buffer, isBinary: boolean) => {
@@ -168,6 +222,15 @@ export const wsRoutes: FastifyPluginAsync<{ registry: SessionRegistry }> = async
       switch (msg.type) {
         case "create": {
           state.visitor = sanitizeVisitor(msg.visitor) ?? state.visitor;
+          if (state.queueHandle) {
+            // Already waiting — restate the position, change nothing.
+            send({
+              type: "queued",
+              ticket: state.queueHandle.ticket,
+              position: state.queueHandle.position(),
+            });
+            return;
+          }
           if (isDraining()) {
             incCounter("rejections_total", { code: "draining" });
             send({ type: "error", code: "draining", message: "server is shutting down — retry shortly" });
@@ -190,17 +253,36 @@ export const wsRoutes: FastifyPluginAsync<{ registry: SessionRegistry }> = async
               return;
             }
           }
-          if (registry.size >= config.maxSessions) {
-            incCounter("rejections_total", { code: "server_full" });
-            send({ type: "error", code: "server_full", message: "too many live sessions" });
+          const verdict = admission.tryAcquire(state.visitor);
+          if (verdict.verdict === "reject") {
+            incCounter("rejections_total", { code: verdict.code });
+            const message =
+              verdict.code === "visitor_limit"
+                ? "this browser already holds a session — close it or reload that tab"
+                : verdict.code === "queue_full"
+                  ? "waiting room is full — try again soon"
+                  : "too many live sessions and no queue room";
+            send({ type: "error", code: verdict.code, message });
             return;
           }
-          incCounter("session_creates_total");
-          const cols = 80;
-          const rows = 24;
-          const session = registry.create(cols, rows);
-          bind(session);
-          send({ type: "created", sessionId: session.id, secret: session.secret });
+          if (verdict.verdict === "queue") {
+            const handle = admission.enqueue(state.visitor);
+            state.queueHandle = handle;
+            const conn = { state, send };
+            queuedConns.add(conn);
+            send({ type: "queued", ticket: handle.ticket, position: handle.position() });
+            void handle.granted().then((outcome) => {
+              state.queueHandle = null;
+              queuedConns.delete(conn);
+              if (outcome === "granted") finishCreate();
+              else if (outcome === "timeout") {
+                send({ type: "error", code: "queue_timeout", message: "waited too long for a slot" });
+              }
+              // "canceled": the connection is closing; nothing to send.
+            });
+            return;
+          }
+          finishCreate();
           break;
         }
         case "attach": {
@@ -240,6 +322,7 @@ export const wsRoutes: FastifyPluginAsync<{ registry: SessionRegistry }> = async
             maxSessions: config.maxSessions,
             uptimeSec: Math.floor(process.uptime()),
             image: config.image,
+            queueDepth: admission.queueDepth(),
           });
           break;
         }
@@ -256,6 +339,9 @@ export const wsRoutes: FastifyPluginAsync<{ registry: SessionRegistry }> = async
         authTimer = null;
       }
       if (!config.rateLimitDisabled && wsCounted) rateLimiter.wsRelease(ip);
+      // A ticket lives exactly as long as its connection.
+      state.queueHandle?.cancel();
+      state.queueHandle = null;
       state.session?.detach();
     };
 

@@ -39,6 +39,10 @@ export const config = {
   authLockoutMs: int("AUTH_LOCKOUT_MS", 60_000),
   maxWsPerIp: int("MAX_WS_PER_IP", 8),
   rateLimitDisabled: process.env.RATE_LIMIT_DISABLED === "1",
+  /** Waiting room: sessions per visitor (browser token), queue depth, queue TTL. */
+  visitorMaxSessions: int("VISITOR_MAX_SESSIONS", 1),
+  queueMax: int("QUEUE_MAX", 8),
+  queueTimeoutMs: int("QUEUE_TIMEOUT_MS", 120_000),
   /** Read-only content jail exposed to the shell and the /api/file* routes. */
   contentDir: path.resolve(process.env.CONTENT_DIR ?? path.join(REPO_ROOT, "content")),
   image: process.env.IMAGE ?? "homepage-shell:latest",

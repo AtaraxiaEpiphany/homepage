@@ -19,6 +19,8 @@ export class Session {
   lastActivity = Date.now();
   exitCode: number | null = null;
   exited = false;
+  /** Fairness key of the creating client, for admission accounting. */
+  visitorId: string | null = null;
 
   private pty: IPty;
   private cols: number;
@@ -165,6 +167,11 @@ export class Session {
 export class SessionRegistry {
   private sessions = new Map<string, Session>();
   private timer: NodeJS.Timeout;
+  /**
+   * Set by the ws layer: fires once per session end (shell exit), after the
+   * map delete. The single decrement path for admission accounting.
+   */
+  onSessionEnd: ((session: Session) => void) | null = null;
 
   constructor(
     private readonly maxSessions: number,
@@ -180,7 +187,10 @@ export class SessionRegistry {
   }
 
   create(cols: number, rows: number): Session {
-    const session = new Session(cols, rows, (s) => this.sessions.delete(s.id));
+    const session = new Session(cols, rows, (s) => {
+      this.sessions.delete(s.id);
+      this.onSessionEnd?.(s);
+    });
     this.sessions.set(session.id, session);
     return session;
   }
