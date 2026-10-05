@@ -55,7 +55,8 @@ export type S2C =
    * on the same socket); `locked_out` and the 4403 close code mean repeated
    * auth failures; `draining` = shutdown in progress; `queue_full` /
    * `visitor_limit` are admission rejections; `queue_timeout` = waited too
-   * long without a slot.
+   * long without a slot; `ticket_invalid` = the broker preflight ticket was
+   * unknown, expired or consumed elsewhere.
    */
   | {
       type: "error";
@@ -68,7 +69,8 @@ export type S2C =
         | "locked_out"
         | "queue_full"
         | "visitor_limit"
-        | "queue_timeout";
+        | "queue_timeout"
+        | "ticket_invalid";
       message: string;
     }
   /** Answer to the `status` control frame — server-side shell stats. */

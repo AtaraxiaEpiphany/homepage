@@ -107,6 +107,7 @@ const COUNTER_HELP: Record<string, string> = {
   session_exits_total: "Sessions whose shell process exited",
   queue_grants_total: "Waiting-room tickets granted, by kind (local/remote host)",
   redis_errors_total: "Redis operations failed, by op (broker mode)",
+  admit_requests_total: "Broker preflight admissions attempted",
 };
 
 const GAUGE_HELP: Record<string, string> = {

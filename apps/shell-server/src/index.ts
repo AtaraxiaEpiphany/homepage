@@ -28,14 +28,34 @@ const pool = new WarmPool(
 );
 const { store: admission, redis } = await createAdmission(() => registry.size + pool.reserved());
 
-await app.register(cors, { origin: true });
+// CORS: /api/admit mutates shared admission state, so cross-origin callers
+// must be allowlisted (CORS_ORIGINS). Empty keeps the dev reflect-all — a
+// public deployment should always set the allowlist.
+await app.register(cors,
+  config.corsOrigins.length > 0
+    ? {
+        origin: (origin, cb) =>
+          cb(null, origin !== undefined && config.corsOrigins.includes(origin)),
+      }
+    : { origin: true },
+);
 await app.register(websocket);
 await app.register(wsRoutes, { registry, admission, pool });
 await app.register(fileRoutes);
+if (redis !== null) {
+  const { brokerRoutes } = await import("./broker.js");
+  await app.register(brokerRoutes, {
+    redis,
+    store: admission,
+    capacityUsed: () => registry.size + pool.reserved(),
+  });
+}
 app.addHook("onClose", async () => {
   pool.dispose();
-  // Broker mode: drop our presence record before the connection goes.
-  if (redis !== null) await redis.hDel("hp:hosts", config.hostId);
+  if (redis !== null) {
+    // Broker onClose hook already retracted the heartbeat; close the socket.
+    await redis.quit().catch(() => {});
+  }
 });
 
 app.get("/api/health", async () => ({ ok: true }));

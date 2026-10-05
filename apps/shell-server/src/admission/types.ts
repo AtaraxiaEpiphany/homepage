@@ -22,14 +22,15 @@ export interface QueueHandle {
   cancel(): void;
 }
 
-export interface RedeemResult {
-  outcome: "invalid" | "valid";
-  /** Absent when invalid. */
-  verdict?: AcquireVerdict;
-  ticket: string;
-  /** The visitor the ticket was issued to (budget is charged under it). */
-  visitorId?: string | null;
-}
+export type RedeemResult =
+  | { outcome: "invalid"; ticket: string }
+  | {
+      outcome: "valid";
+      verdict: AcquireVerdict;
+      ticket: string;
+      /** The visitor the ticket was issued to (budget is charged under it). */
+      visitorId: string | null;
+    };
 
 export interface AdmissionStore {
   /**

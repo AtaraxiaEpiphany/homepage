@@ -263,7 +263,6 @@ export class RedisAdmission implements AdmissionStore {
     }
     return { outcome: "valid", verdict, ticket, visitorId };
   }
-
   /**
    * Drain when this host has headroom; resolve local waiters for tickets it
    * owned. Called by the 1s tick — also the path that turns a remote host's

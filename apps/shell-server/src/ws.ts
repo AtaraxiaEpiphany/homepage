@@ -39,7 +39,8 @@ interface ConnState {
 /** Visitor tokens are opaque server-side; shape-check only. */
 const VISITOR_RE = /^[\w-]{8,128}$/;
 
-const sanitizeVisitor = (v: unknown): string | null =>
+/** Shared with the broker HTTP routes — same fairness key, same rules. */
+export const sanitizeVisitor = (v: unknown): string | null =>
   typeof v === "string" && VISITOR_RE.test(v) ? v : null;
 
 /** Normalize IPv4-mapped IPv6 so the limiter sees one form per address. */
@@ -250,6 +251,56 @@ export const wsRoutes: FastifyPluginAsync<{
           if (state.session && !state.session.exited) {
             incCounter("rejections_total", { code: "busy" });
             send({ type: "error", code: "busy", message: "connection already owns a session" });
+            return;
+          }
+          // Broker preflight ticket (phase: multi-host). The rate bucket was
+          // paid at POST /api/admit; the ticket is the proof of admission.
+          // Single-host stores have no redeemTicket and ignore the field.
+          if (typeof msg.ticket === "string" && msg.ticket !== "" && admission.redeemTicket) {
+            if (createBusy) return;
+            createBusy = true;
+            let result;
+            try {
+              result = await admission.redeemTicket(msg.ticket);
+            } catch (err) {
+              createBusy = false;
+              app.log.error({ err }, "ticket redemption failed");
+              incCounter("rejections_total", { code: "server_full" });
+              send({ type: "error", code: "server_full", message: "waiting room unavailable" });
+              return;
+            }
+            createBusy = false;
+            if (result.outcome === "invalid") {
+              incCounter("rejections_total", { code: "ticket_invalid" });
+              send({
+                type: "error",
+                code: "ticket_invalid",
+                message: "admission ticket unknown or expired — request a new one",
+              });
+              return;
+            }
+            // The ticket's visitor is authoritative — budget was charged
+            // under it, so release must refund the same id.
+            state.visitor = result.visitorId ?? null;
+            if (result.verdict.verdict === "admit") {
+              finishCreate();
+              return;
+            }
+            if (result.verdict.verdict === "queue") {
+              // The slot reserved at grant time evaporated; the ticket is
+              // back in the queue — poll the broker for the new position.
+              send({ type: "queued", ticket: msg.ticket, position: admission.queueDepth() });
+              return;
+            }
+            incCounter("rejections_total", { code: result.verdict.code });
+            send({
+              type: "error",
+              code: result.verdict.code,
+              message:
+                result.verdict.code === "visitor_limit"
+                  ? "this browser already holds a session — close it or reload that tab"
+                  : "waiting room is full — try again soon",
+            });
             return;
           }
           if (!config.rateLimitDisabled) {
