@@ -4,6 +4,7 @@ import type { C2S, S2C } from "@homepage/shared";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { config } from "./config.js";
 import { Session, SessionRegistry } from "./session.js";
+import { incCounter } from "./metrics.js";
 
 const MAX_CONTROL_FRAME = 64 * 1024; // JSON text frames
 const MAX_INPUT_FRAME = 1024 * 1024; // raw stdin bytes (paste guard)
@@ -40,6 +41,7 @@ export const wsRoutes: FastifyPluginAsync = async (app) => {
     // ignored until the handshake lands; silence or abuse closes 4401.
     const state: ConnState = { session: null, authed: !config.token };
     socketRaw.binaryType = "nodebuffer";
+    incCounter("ws_connections_total");
 
     let authTimer: NodeJS.Timeout | null = null;
     if (config.token) {
@@ -71,6 +73,7 @@ export const wsRoutes: FastifyPluginAsync = async (app) => {
     socketRaw.on("message", (data: Buffer, isBinary: boolean) => {
       if (!state.authed) {
         if (isBinary) {
+          incCounter("auth_failures_total");
           socketRaw.close(4401, "unauthorized");
           return;
         }
@@ -87,6 +90,7 @@ export const wsRoutes: FastifyPluginAsync = async (app) => {
           typeof msg.token !== "string" ||
           !safeEqual(msg.token, config.token)
         ) {
+          incCounter("auth_failures_total");
           socketRaw.close(4401, "unauthorized");
           return;
         }
@@ -116,13 +120,16 @@ export const wsRoutes: FastifyPluginAsync = async (app) => {
       switch (msg.type) {
         case "create": {
           if (state.session && !state.session.exited) {
+            incCounter("rejections_total", { code: "busy" });
             send({ type: "error", code: "busy", message: "connection already owns a session" });
             return;
           }
           if (registry.size >= config.maxSessions) {
+            incCounter("rejections_total", { code: "server_full" });
             send({ type: "error", code: "server_full", message: "too many live sessions" });
             return;
           }
+          incCounter("session_creates_total");
           const cols = 80;
           const rows = 24;
           const session = registry.create(cols, rows);
@@ -132,6 +139,7 @@ export const wsRoutes: FastifyPluginAsync = async (app) => {
         }
         case "attach": {
           if (state.session && !state.session.exited) {
+            incCounter("rejections_total", { code: "busy" });
             send({ type: "error", code: "busy", message: "connection already owns a session" });
             return;
           }
@@ -142,6 +150,7 @@ export const wsRoutes: FastifyPluginAsync = async (app) => {
             typeof msg.secret === "string" &&
             safeEqual(msg.secret, session.secret)
           ) {
+            incCounter("attach_ok_total");
             bind(session);
             session.touch();
             session.nudge(); // repaint for the freshly blank client screen
@@ -149,6 +158,7 @@ export const wsRoutes: FastifyPluginAsync = async (app) => {
           } else {
             // Gone or wrong secret — indistinguishable on purpose; the client
             // falls back to `create` either way.
+            incCounter("attach_fail_total");
             send({ type: "attached", sessionId: msg.sessionId, ok: false });
           }
           break;

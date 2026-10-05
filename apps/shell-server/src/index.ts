@@ -4,6 +4,7 @@ import websocket from "@fastify/websocket";
 import { config } from "./config.js";
 import { wsRoutes } from "./ws.js";
 import { fileRoutes } from "./files.js";
+import { render } from "./metrics.js";
 
 const app = Fastify({
   logger: true,
@@ -16,5 +17,9 @@ await app.register(wsRoutes);
 await app.register(fileRoutes);
 
 app.get("/api/health", async () => ({ ok: true }));
+
+app.get("/api/metrics", async (_req, reply) => {
+  reply.type("text/plain; version=0.0.4; charset=utf-8").send(render());
+});
 
 await app.listen({ port: config.port, host: config.host });

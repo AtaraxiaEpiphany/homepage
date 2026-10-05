@@ -1,6 +1,10 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { spawn, type IPty } from "node-pty";
 import { DOCKER_RUN_FLAGS, config } from "./config.js";
+import { SPAWN_BUCKETS_MS, incCounter, observeHistogram, setGauge } from "./metrics.js";
+
+/** Module-level so the gauge survives registry map churn between create/exit. */
+let liveSessions = 0;
 
 /**
  * One Session = one ephemeral `docker run` of the shell image, one node-pty.
@@ -19,6 +23,8 @@ export class Session {
   private pty: IPty;
   private cols: number;
   private rows: number;
+  /** Set on the first PTY output — measures real shell readiness (zsh boot). */
+  private firstOutputAt: number | null = null;
   /** WS currently bound to this session, if any. */
   private socket: {
     send: (data: Buffer) => void;
@@ -45,10 +51,24 @@ export class Session {
       },
     });
 
-    this.pty.onData((data) => this.pushOutput(Buffer.from(data, "utf8")));
+    setGauge("sessions_active", ++liveSessions);
+    this.pty.onData((data) => {
+      if (this.firstOutputAt === null) {
+        this.firstOutputAt = Date.now();
+        observeHistogram(
+          "spawn_ready_ms",
+          "Time from container spawn to first PTY output (shell boot cost)",
+          SPAWN_BUCKETS_MS,
+          this.firstOutputAt - this.createdAt,
+        );
+      }
+      this.pushOutput(Buffer.from(data, "utf8"));
+    });
     this.pty.onExit(({ exitCode }) => {
       this.exited = true;
       this.exitCode = exitCode ?? null;
+      setGauge("sessions_active", --liveSessions);
+      incCounter("session_exits_total");
       onExit(this);
     });
   }
@@ -117,6 +137,7 @@ export class Session {
 
   kill(): void {
     if (this.exited) return;
+    incCounter("session_kills_total");
     this.pty.kill();
   }
 
