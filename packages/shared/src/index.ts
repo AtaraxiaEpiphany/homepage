@@ -22,7 +22,7 @@ export type C2S =
       type: "auth";
       token: string;
     } & VisitorFields)
-  | ({ type: "create" } & VisitorFields)
+  | ({ type: "create"; /** Broker ticket (phase: multi-host admission). Reserved; single-host servers ignore it. */ ticket?: string } & VisitorFields)
   /**
    * Reattach to a live session after a WS drop, within the grace window.
    * `secret` is the per-session bearer proof issued once in `created`.
@@ -42,19 +42,45 @@ export type S2C =
     }
   /** ok=false means the session is gone or the proof was rejected; client must send `create`. */
   | { type: "attached"; sessionId: string; ok: boolean }
+  /**
+   * Capacity is full — the connection holds a waiting-room ticket. `position`
+   * is 1-based; updates arrive as `queue_update`. The ticket lives exactly as
+   * long as the WS connection: closing it leaves the queue.
+   */
+  | { type: "queued"; ticket: string; position: number }
+  | { type: "queue_update"; position: number }
   | { type: "exit"; exitCode: number | null }
   /**
    * `rate_limited` throttles create spam (connection stays open — retry later
    * on the same socket); `locked_out` and the 4403 close code mean repeated
-   * auth failures; `draining` = shutdown in progress.
+   * auth failures; `draining` = shutdown in progress; `queue_full` /
+   * `visitor_limit` are admission rejections; `queue_timeout` = waited too
+   * long without a slot.
    */
   | {
       type: "error";
-      code: "server_full" | "spawn_failed" | "busy" | "draining" | "rate_limited" | "locked_out";
+      code:
+        | "server_full"
+        | "spawn_failed"
+        | "busy"
+        | "draining"
+        | "rate_limited"
+        | "locked_out"
+        | "queue_full"
+        | "visitor_limit"
+        | "queue_timeout";
       message: string;
     }
   /** Answer to the `status` control frame — server-side shell stats. */
-  | { type: "status"; sessions: number; maxSessions: number; uptimeSec: number; image: string }
+  | {
+      type: "status";
+      sessions: number;
+      maxSessions: number;
+      uptimeSec: number;
+      image: string;
+      /** Waiting-room depth; absent on servers without admission. */
+      queueDepth?: number;
+    }
   | { type: "pong" };
 
 /**
