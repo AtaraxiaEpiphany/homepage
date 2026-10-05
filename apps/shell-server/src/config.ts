@@ -1,5 +1,6 @@
 import path from "node:path";
 import { existsSync } from "node:fs";
+import { hostname } from "node:os";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -50,6 +51,26 @@ export const config = {
   /** Saturation floors for the adaptive grace/idle shrink. */
   minReattachGraceMs: int("MIN_REATTACH_GRACE_MS", 5_000),
   minIdleTimeoutMs: int("MIN_IDLE_TIMEOUT_MS", 180_000),
+  /**
+   * Broker mode (multi-host): shared redis holding admission state (queue,
+   * tickets, visitor budgets, host presence). Empty = single-host memory
+   * store. Data-plane WS traffic stays client↔host direct; redis is the
+   * control plane only.
+   */
+  brokerRedisUrl: process.env.BROKER_REDIS_URL ?? "",
+  /** This host's id in the broker presence registry — unique per instance. */
+  hostId: process.env.HOST_ID ?? `${hostname()}-${process.pid}`,
+  /**
+   * WS base URL (wss://…) clients are told to connect to when this host
+   * grants them a slot. Empty = same public origin (all hosts behind one
+   * reverse proxy routing /ws to whichever is up).
+   */
+  hostPublicUrl: process.env.HOST_PUBLIC_URL ?? "",
+  /** Comma-separated CORS allowlist for /api/admit; empty = reflect any origin (dev). */
+  corsOrigins: (process.env.CORS_ORIGINS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
   /** Read-only content jail exposed to the shell and the /api/file* routes. */
   contentDir: path.resolve(process.env.CONTENT_DIR ?? path.join(REPO_ROOT, "content")),
   image: process.env.IMAGE ?? "homepage-shell:latest",

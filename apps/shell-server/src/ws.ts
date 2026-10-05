@@ -8,7 +8,7 @@ import { WarmPool } from "./pool.js";
 import { incCounter } from "./metrics.js";
 import { isDraining } from "./shutdown.js";
 import { rateLimiter } from "./ratelimit.js";
-import type { AdmissionStore, QueueHandle } from "./admission/index.js";
+import type { AdmissionStore, QueueHandle, AcquireVerdict } from "./admission/index.js";
 
 const MAX_CONTROL_FRAME = 64 * 1024; // JSON text frames
 const MAX_INPUT_FRAME = 1024 * 1024; // raw stdin bytes (paste guard)
@@ -85,6 +85,10 @@ export const wsRoutes: FastifyPluginAsync<{
     // Per-IP concurrent-connection cap — checked before any auth work. When
     // the cap rejects, `cleanup` must not release a count we never took.
     let wsCounted = false;
+    // One create-at-a-time per connection: admission is async (broker mode),
+    // and a second create racing through the await could double-charge or
+    // double-bind. Late arrivals are dropped — a client sends create once.
+    let createBusy = false;
     if (!config.rateLimitDisabled && !rateLimiter.wsAcquire(ip)) {
       incCounter("rejections_total", { code: "connection_limit" });
       socketRaw.close(4429, "too many connections from this address");
@@ -155,7 +159,7 @@ export const wsRoutes: FastifyPluginAsync<{
       send({ type: "created", sessionId: session.id, secret: session.secret });
     };
 
-    socketRaw.on("message", (data: Buffer, isBinary: boolean) => {
+    socketRaw.on("message", async (data: Buffer, isBinary: boolean) => {
       if (!state.authed) {
         if (
           !config.rateLimitDisabled &&
@@ -260,8 +264,25 @@ export const wsRoutes: FastifyPluginAsync<{
               return;
             }
           }
-          const verdict = admission.tryAcquire(state.visitor);
+          // Admission calls are async in broker mode (redis) and sync-shaped
+          // in single-host mode; await covers both. The busy guard keeps a
+          // second create from racing in while the first is mid-await.
+          if (createBusy) return;
+          createBusy = true;
+          let verdict: AcquireVerdict;
+          try {
+            verdict = await admission.tryAcquire(state.visitor);
+          } catch (err) {
+            // Redis store normally fails closed with a verdict; this is the
+            // belt for anything that slips past it.
+            createBusy = false;
+            app.log.error({ err }, "admission backend unavailable");
+            incCounter("rejections_total", { code: "server_full" });
+            send({ type: "error", code: "server_full", message: "waiting room unavailable" });
+            return;
+          }
           if (verdict.verdict === "reject") {
+            createBusy = false;
             incCounter("rejections_total", { code: verdict.code });
             const message =
               verdict.code === "visitor_limit"
@@ -273,10 +294,20 @@ export const wsRoutes: FastifyPluginAsync<{
             return;
           }
           if (verdict.verdict === "queue") {
-            const handle = admission.enqueue(state.visitor);
+            let handle: QueueHandle;
+            try {
+              handle = await admission.enqueue(state.visitor);
+            } catch (err) {
+              createBusy = false;
+              app.log.error({ err }, "admission backend unavailable");
+              incCounter("rejections_total", { code: "server_full" });
+              send({ type: "error", code: "server_full", message: "waiting room unavailable" });
+              return;
+            }
             state.queueHandle = handle;
             const conn = { state, send };
             queuedConns.add(conn);
+            createBusy = false;
             send({ type: "queued", ticket: handle.ticket, position: handle.position() });
             void handle.granted().then((outcome) => {
               state.queueHandle = null;
@@ -289,6 +320,7 @@ export const wsRoutes: FastifyPluginAsync<{
             });
             return;
           }
+          createBusy = false;
           finishCreate();
           break;
         }

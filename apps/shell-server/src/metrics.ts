@@ -105,10 +105,13 @@ const COUNTER_HELP: Record<string, string> = {
   auth_failures_total: "Failed first-frame auth attempts",
   session_kills_total: "Sessions force-killed (reaper, drain, dispose)",
   session_exits_total: "Sessions whose shell process exited",
+  queue_grants_total: "Waiting-room tickets granted, by kind (local/remote host)",
+  redis_errors_total: "Redis operations failed, by op (broker mode)",
 };
 
 const GAUGE_HELP: Record<string, string> = {
   sessions_active: "Live shell sessions",
+  queue_depth: "Waiting-room depth (local store: exact; redis store: ≤1s stale)",
 };
 
 export const SPAWN_BUCKETS_MS = [50, 100, 200, 400, 800, 1600, 3200] as const;

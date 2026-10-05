@@ -36,7 +36,7 @@ export class MemoryAdmission implements AdmissionStore {
     private readonly queueTimeoutMs: number,
   ) {}
 
-  tryAcquire(visitorId: string | null): AcquireVerdict {
+  async tryAcquire(visitorId: string | null): Promise<AcquireVerdict> {
     if (visitorId !== null && this.visitorUsage(visitorId) >= this.visitorMaxSessions) {
       return { verdict: "reject", code: "visitor_limit" };
     }
@@ -48,7 +48,7 @@ export class MemoryAdmission implements AdmissionStore {
     return { verdict: "reject", code: "queue_full" };
   }
 
-  enqueue(visitorId: string | null): QueueHandle {
+  async enqueue(visitorId: string | null): Promise<QueueHandle> {
     const entry: QueueEntry = {
       ticket: randomUUID(),
       visitorId,

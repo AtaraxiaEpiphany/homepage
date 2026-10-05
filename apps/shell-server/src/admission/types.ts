@@ -1,8 +1,9 @@
 /**
  * Admission control: capacity check, per-visitor budget, waiting room. The
- * interface is async-shaped-neutral so the memory store (single host) and the
- * redis store (broker mode, phase: multi-host) are interchangeable behind
- * ws.ts — the create path reads the same either way.
+ * interface is store-agnostic: the memory store (single host) and the redis
+ * store (broker mode, multi-host) are interchangeable behind ws.ts — the
+ * create path reads the same either way. Methods that touch remote state are
+ * async; awaiting the memory store's promises is free.
  */
 
 export type AcquireVerdict =
@@ -21,14 +22,23 @@ export interface QueueHandle {
   cancel(): void;
 }
 
+export interface RedeemResult {
+  outcome: "invalid" | "valid";
+  /** Absent when invalid. */
+  verdict?: AcquireVerdict;
+  ticket: string;
+  /** The visitor the ticket was issued to (budget is charged under it). */
+  visitorId?: string | null;
+}
+
 export interface AdmissionStore {
   /**
    * Try to admit a create outright. "queue" means capacity is full but the
    * waiting room has room — follow with `enqueue`. Budget is charged here and
    * on grants, refunded by `release` (once per session end).
    */
-  tryAcquire(visitorId: string | null): AcquireVerdict;
-  enqueue(visitorId: string | null): QueueHandle;
+  tryAcquire(visitorId: string | null): Promise<AcquireVerdict>;
+  enqueue(visitorId: string | null): Promise<QueueHandle>;
   /** Refund one session for this visitor. Idempotent per session end. */
   release(visitorId: string | null): void;
   queueDepth(): number;
@@ -36,4 +46,11 @@ export interface AdmissionStore {
   onDepthChange(cb: () => void): void;
   /** Settle every queued handle with "canceled" — shutdown path. */
   dispose(): void;
+  /**
+   * Broker mode only (undefined on the memory store): consume a preflight
+   * ticket and run admission on its behalf. "invalid" = unknown, expired or
+   * malformed ticket. When the verdict is not "admit" the ticket is restored
+   * to the queue first, so the caller's waiting-room spot survives.
+   */
+  redeemTicket?(ticket: string): Promise<RedeemResult>;
 }

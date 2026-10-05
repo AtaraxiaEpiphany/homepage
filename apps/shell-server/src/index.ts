@@ -9,7 +9,6 @@ import { fileRoutes } from "./files.js";
 import { render } from "./metrics.js";
 import { installShutdown } from "./shutdown.js";
 import { createAdmission } from "./admission/index.js";
-
 const app = Fastify({
   logger: true,
   bodyLimit: 4 * 1024 * 1024,
@@ -27,13 +26,17 @@ const pool = new WarmPool(
   () => new Session(80, 24, () => {}),
   () => registry.size,
 );
-const admission = createAdmission(() => registry.size + pool.reserved());
+const { store: admission, redis } = await createAdmission(() => registry.size + pool.reserved());
 
 await app.register(cors, { origin: true });
 await app.register(websocket);
 await app.register(wsRoutes, { registry, admission, pool });
 await app.register(fileRoutes);
-app.addHook("onClose", async () => pool.dispose());
+app.addHook("onClose", async () => {
+  pool.dispose();
+  // Broker mode: drop our presence record before the connection goes.
+  if (redis !== null) await redis.hDel("hp:hosts", config.hostId);
+});
 
 app.get("/api/health", async () => ({ ok: true }));
 
