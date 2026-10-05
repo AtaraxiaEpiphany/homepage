@@ -168,7 +168,10 @@ export class ShellClient {
         break;
       }
       case "queue_update": {
-        if (this.state === "queued") this.setState("queued", `position ${msg.position}`);
+        // position 0 = about to be granted; `created` lands momentarily.
+        if (this.state === "queued" && msg.position > 0) {
+          this.setState("queued", `position ${msg.position}`);
+        }
         break;
       }
       case "exit": {
