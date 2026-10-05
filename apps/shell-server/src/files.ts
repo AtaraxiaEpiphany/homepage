@@ -4,6 +4,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { config } from "./config.js";
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
+const MAX_REPLAY_BYTES = 5 * 1024 * 1024; // asciinema cast for the fallback player
 const OPENABLE_EXT = new Set(["md", "markdown", "txt"]);
 
 /** Recursive listing of the content jail, relative paths, sorted. */
@@ -56,5 +57,24 @@ export const fileRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(413).send({ error: "file too large" });
     }
     return reply.send(readFileSync(abs));
+  });
+
+  /**
+   * The demo replay (asciinema v2 JSONL), served from the same content jail
+   * the shell reads. Optional by design: 404 — never 500 — when the cast is
+   * absent or oversized, so deployments without one just skip the fallback.
+   */
+  app.get("/api/replay", async (_req, reply) => {
+    const abs = path.resolve(config.contentDir, "replay.cast");
+    let st;
+    try {
+      st = statSync(abs);
+    } catch {
+      return reply.code(404).send({ error: "no replay cast" });
+    }
+    if (!st.isFile() || st.size > MAX_REPLAY_BYTES) {
+      return reply.code(404).send({ error: "no replay cast" });
+    }
+    return reply.type("application/x-asciicast").send(readFileSync(abs));
   });
 };
