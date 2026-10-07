@@ -18,13 +18,13 @@
 /* Nerd Font Mono stays as fallback (icons from eza, etc.). */
 @font-face {
   font-family: "JetBrainsMono NFM";
-  src: url("../assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf") format("truetype");
+  src: url("../assets/fonts/JetBrainsMonoNerdFontMono-Regular.woff2") format("woff2");
   font-weight: 400;
   font-display: swap;
 }
 @font-face {
   font-family: "JetBrainsMono NFM";
-  src: url("../assets/fonts/JetBrainsMonoNerdFontMono-Bold.ttf") format("truetype");
+  src: url("../assets/fonts/JetBrainsMonoNerdFontMono-Bold.woff2") format("woff2");
   font-weight: 700;
   font-display: swap;
 }
