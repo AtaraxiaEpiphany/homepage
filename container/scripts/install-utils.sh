@@ -15,7 +15,8 @@ set -Eeuo pipefail
 apt-get update
 apt-get install -y --no-install-recommends \
   zsh git curl ca-certificates fd-find less procps time \
-  tmux ripgrep jq zoxide
+  tmux ripgrep jq zoxide \
+  vim nano tree htop wget psmisc file
 
 # --- fzf: pinned release binary (apt's 0.44 lacks `fzf --zsh`) --------------
 curl -fsSL --retry 3 \
