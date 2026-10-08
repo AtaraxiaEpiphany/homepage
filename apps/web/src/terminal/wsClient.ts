@@ -57,6 +57,10 @@ export class ShellClient {
   private targetIsStored = false;
   /** Consecutive failed reattach dials — 2 in a row drops the stale entry. */
   private storedFailures = 0;
+  /** True until this page has come online once — later connects are in-page reconnects. */
+  private everOnline = false;
+  /** Any PTY output seen on the current dial — live producer detector for fresh reattach. */
+  private sawOutput = false;
 
   onState: (state: ConnState, detail?: string) => void = () => {};
   onOutput: (data: Uint8Array) => void = () => {};
@@ -226,6 +230,7 @@ export class ShellClient {
     this.stopQueuePoll();
     this.wsTarget = target;
     this.targetIsStored = saved !== null;
+    this.sawOutput = false;
     this.setState("connecting");
     const ws = new WebSocket(target);
     ws.binaryType = "arraybuffer";
@@ -250,6 +255,7 @@ export class ShellClient {
       if (typeof ev.data === "string") {
         this.onControl(JSON.parse(ev.data) as S2C);
       } else {
+        this.sawOutput = true;
         this.onOutput(new Uint8Array(ev.data));
       }
     };
@@ -306,6 +312,7 @@ export class ShellClient {
         this.persistSession(msg.sessionId, msg.secret);
         this.storedFailures = 0;
         this.backoffMs = 500;
+        this.everOnline = true;
         this.setPressure(false);
         this.setState("online");
         this.startPings();
@@ -317,6 +324,15 @@ export class ShellClient {
           this.storedFailures = 0;
           this.backoffMs = 500;
           this.setPressure(false);
+          // The backlog flush (if any) preceded this control frame — sawOutput
+          // therefore says whether something was still producing in the
+          // reattach gap. On a fresh page load that means a live foreground
+          // job (the demo tour mid-play, a chatty top) survived the reload;
+          // stop it the way ^C would — the demo traps INT and exits clean.
+          // In-page reconnects (everOnline) keep the session untouched, so a
+          // network blip never kills what the user was running.
+          if (!this.everOnline && this.sawOutput) this.input("\x03");
+          this.everOnline = true;
           this.setState("online");
           this.startPings();
           if (this.pendingResize) this.send({ type: "resize", ...this.pendingResize });

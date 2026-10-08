@@ -4,13 +4,17 @@
 # shell; no frontend interception anywhere. Keys: space = pause/resume,
 # q or Ctrl-C = quit. Pacing: 18ms/char baseline, +180ms after punctuation,
 # +600ms at scene breaks.
+#
+# Ctrl-C reaches the demo as SIGINT (tty ISIG is always on, including during
+# the `read -k` waits — handled by the INT trap); the \x03 data case below is
+# the belt for ISIG-off ttys, where the byte would land as ordinary input.
 
 typeset -g _DEMO_PAUSED=0 _DEMO_ABORT=0
 
 _demo_handle_key() {
   case "$1" in
     ' ') _DEMO_PAUSED=$((1 - _DEMO_PAUSED)) ;;
-    [qQ]) _DEMO_ABORT=1 ;;
+    [qQ] | $'\x03') _DEMO_ABORT=1 ;;
   esac
 }
 
@@ -69,6 +73,8 @@ _demo_run() {
   _demo_wait 0.45 || return 1
   printf '\r\n'
   if ! out="$(eval "$cmd" 2>&1)"; then
+    # an abort mid-eval (Ctrl-C) already failed this scene — exit silently
+    (( _DEMO_ABORT )) && return 1
     printf '\e[31mdemo: scene command failed: %s\e[0m\r\n' "$cmd"
     return 1
   fi
@@ -112,7 +118,7 @@ demo() {
   fi
 
   _demo_type 'try it yourself: ' $'\e[90m' || { _demo_abort_cleanup; return 0; }
-  _demo_type 'Ctrl-R (fzf history) · Tab (fzf-tab completion) · Ctrl+P / ⌘P (palette)' || { _demo_abort_cleanup; return 0; }
+  _demo_type 'Ctrl-R (fzf history) · Tab (fzf-tab completion) · Ctrl+P (history) · Ctrl+Shift+P / ⌘⇧P (palette)' || { _demo_abort_cleanup; return 0; }
   printf '\r\n'
   _demo_type 'demo complete.' $'\e[32m' || { _demo_abort_cleanup; return 0; }
   printf '\r\n'
