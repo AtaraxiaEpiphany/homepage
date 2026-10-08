@@ -91,34 +91,35 @@ export function TerminalView({ onState, clientRef, onOpenPath, onPalette, onPres
 
     term.onData((data) => client.input(data));
 
-    // Ctrl+P / Ctrl+Shift+P (⌘P / ⌘⇧P on Mac, where Meta replaces Ctrl) open
-    // the command palette — VS Code muscle memory, so plain Ctrl+P works too,
-    // shift optional on both. Intercepted twice, because neither layer alone
-    // covers every platform:
-    //   1. Window-level capture — runs before xterm regardless of focus and
-    //      lets us keep the key out of the browser too (print dialog,
-    //      Firefox private window).
+    // Ctrl+Shift+P / ⌘⇧P (VS Code muscle memory) open the command palette;
+    // plain Ctrl+P stays with the shell — readline previous-history. Two
+    // interception layers, because neither alone covers every platform:
+    //   1. Window-level capture — runs before xterm regardless of focus. For
+    //      the palette chord it keeps the key out of the shell entirely; for
+    //      the plain chord it only preventDefaults (browser print dialog,
+    //      Firefox private window) and lets xterm see the key so ^P still
+    //      reaches the shell.
     //   2. term.attachCustomKeyEventHandler — xterm's own gate. On macOS the
     //      window event can be lost (IME processing, Safari menu handling,
     //      focus races right after mount) while xterm's textarea still sees
-    //      it; swallowing it there means the shell never gets ^P
-    //      (previous-history) and the palette still opens.
+    //      it; swallowing the palette chord there means the shell never gets
+    //      ^⇧P and the palette still opens.
     // Ctrl+K is deliberately left to the shell — emacs kill-line.
     const paletteKeys = (e: KeyboardEvent) => {
-      if (
-        e.type === "keydown" &&
-        !e.repeat &&
-        e.code === "KeyP" &&
-        (e.ctrlKey || e.metaKey)
-      ) {
-        e.preventDefault();
-        e.stopPropagation();
-        onPalette();
+      if (e.type !== "keydown" || e.code !== "KeyP" || !(e.ctrlKey || e.metaKey)) return;
+      if (e.shiftKey) {
+        if (!e.repeat) {
+          e.preventDefault();
+          e.stopPropagation();
+          onPalette();
+        }
+        return;
       }
+      e.preventDefault(); // block the print dialog; xterm still receives the key
     };
     window.addEventListener("keydown", paletteKeys, true);
     term.attachCustomKeyEventHandler((e) => {
-      if (e.type === "keydown" && e.code === "KeyP" && (e.ctrlKey || e.metaKey)) {
+      if (e.type === "keydown" && e.code === "KeyP" && e.shiftKey && (e.ctrlKey || e.metaKey)) {
         onPalette();
         return false;
       }
