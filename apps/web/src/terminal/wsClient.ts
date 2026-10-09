@@ -244,7 +244,16 @@ export class ShellClient {
       const visitor = getVisitor();
       if (WS_TOKEN) this.send({ type: "auth", token: WS_TOKEN, visitor });
       if (saved) {
-        this.send({ type: "attach", sessionId: saved.id, secret: saved.secret });
+        // A fresh page load (never online in this document) starts with an
+        // empty xterm buffer — ask for the full output log so the welcome
+        // banner and scrollback rebuild. An in-page reconnect keeps its
+        // buffer; replaying would duplicate everything before the gap.
+        this.send({
+          type: "attach",
+          sessionId: saved.id,
+          secret: saved.secret,
+          replay: !this.everOnline,
+        });
       } else {
         this.send({ type: "create", visitor, ...(ticket ? { ticket } : {}) });
         this.startPings();
@@ -255,7 +264,11 @@ export class ShellClient {
       if (typeof ev.data === "string") {
         this.onControl(JSON.parse(ev.data) as S2C);
       } else {
-        this.sawOutput = true;
+        // Only output arriving once online marks a live producer for the
+        // fresh-reattach interrupt below — the pre-attach catch-up flush
+        // (full log replay or disconnect gap) precedes the attached frame
+        // and must not read as one, or every reload would also send ^C.
+        if (this.state === "online") this.sawOutput = true;
         this.onOutput(new Uint8Array(ev.data));
       }
     };

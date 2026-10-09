@@ -107,21 +107,24 @@ export const wsRoutes: FastifyPluginAsync<{
       if (socketRaw.readyState === socketRaw.OPEN) socketRaw.send(JSON.stringify(msg));
     };
 
-    const bind = (session: Session) => {
+    const bind = (session: Session, replay = false) => {
       state.session = session;
-      session.attach({
-        send: (data: Buffer) => {
-          if (socketRaw.readyState === socketRaw.OPEN) socketRaw.send(data, { binary: true });
+      session.attach(
+        {
+          send: (data: Buffer) => {
+            if (socketRaw.readyState === socketRaw.OPEN) socketRaw.send(data, { binary: true });
+          },
+          close: (code: number, reason: string) => {
+            // Null BEFORE closing the socket: the late 'close' event runs
+            // state.session?.detach() — if it still pointed at the session it
+            // would unbind whoever superseded us.
+            state.session = null;
+            if (socketRaw.readyState === socketRaw.OPEN) socketRaw.close(code, reason);
+          },
+          readyState: socketRaw.readyState,
         },
-        close: (code: number, reason: string) => {
-          // Null BEFORE closing the socket: the late 'close' event runs
-          // state.session?.detach() — if it still pointed at the session it
-          // would unbind whoever superseded us.
-          state.session = null;
-          if (socketRaw.readyState === socketRaw.OPEN) socketRaw.close(code, reason);
-        },
-        readyState: socketRaw.readyState,
-      });
+        { replay },
+      );
     };
 
     // The tail of every create path (direct admit or queue grant). Capacity
@@ -393,9 +396,17 @@ export const wsRoutes: FastifyPluginAsync<{
             safeEqual(msg.secret, session.secret)
           ) {
             incCounter("attach_ok_total");
-            bind(session);
+            // replay=true: a fresh page load — the client's xterm buffer is
+            // empty and needs the whole log (banner, scrollback) rebuilt.
+            // Absent: in-page reconnect, buffer intact, gap flush only.
+            const replay = msg.replay === true;
+            bind(session, replay);
             session.touch();
-            session.nudge(); // repaint for the freshly blank client screen
+            // The nudge's shrink/restore fires two WINCH repaints; without
+            // a replay that is the only thing that draws the prompt onto
+            // the blank client screen. With one, the log already ends at
+            // the live prompt — repainting would just double it.
+            if (!replay) session.nudge();
             send({ type: "attached", sessionId: session.id, ok: true });
           } else {
             // Gone or wrong secret — indistinguishable on purpose; the client

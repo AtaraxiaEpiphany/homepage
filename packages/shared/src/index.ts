@@ -26,8 +26,11 @@ export type C2S =
   /**
    * Reattach to a live session after a WS drop, within the grace window.
    * `secret` is the per-session bearer proof issued once in `created`.
+   * `replay` asks for the full output log, not just the disconnect gap —
+   * sent by a freshly loaded page whose xterm buffer starts empty; an
+   * in-page reconnect (buffer intact) must leave it off or output doubles.
    */
-  | { type: "attach"; sessionId: string; secret: string }
+  | { type: "attach"; sessionId: string; secret: string; replay?: boolean }
   | { type: "resize"; cols: number; rows: number }
   | { type: "status" }
   | { type: "ping" };

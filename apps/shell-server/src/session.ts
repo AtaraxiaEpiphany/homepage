@@ -43,9 +43,13 @@ export class Session {
     close: (code: number, reason: string) => void;
     readyState: number;
   } | null = null;
-  /** PTY output buffered while no socket is attached (reattach gap). */
-  private backlog: Buffer[] = [];
-  private backlogBytes = 0;
+  /** PTY output log (ring buffer). Replayed whole on a fresh-page attach. */
+  private log: Buffer[] = [];
+  private logBytes = 0;
+  /** Cumulative bytes trimmed off the front of `log` by the cap. */
+  private droppedBytes = 0;
+  /** Cumulative log bytes already flushed to an attached client. */
+  private deliveredBytes = 0;
   private static readonly BACKLOG_CAP = 256 * 1024;
 
   constructor(cols: number, rows: number, onExit: (session: Session) => void) {
@@ -92,20 +96,42 @@ export class Session {
     this.exitFinalizer = finalizer;
   }
 
-  attach(socket: {
-    send: (data: Buffer) => void;
-    close: (code: number, reason: string) => void;
-    readyState: number;
-  }): void {
+  /**
+   * Bind a socket and catch it up. `replay` flushes the whole output log —
+   * a freshly loaded page reattaching with an empty xterm buffer rebuilds
+   * the screen and scrollback (the welcome banner included) from the raw
+   * byte stream. Without it only the disconnect gap is flushed: an in-page
+   * reconnect still holds everything before the gap, and a double flush
+   * would duplicate it. Warm-pool handouts count as the first attach: the
+   * banner they booted with sits at log start, `deliveredBytes` is 0, and
+   * the non-replay flush delivers exactly that.
+   */
+  attach(
+    socket: {
+      send: (data: Buffer) => void;
+      close: (code: number, reason: string) => void;
+      readyState: number;
+    },
+    opts: { replay?: boolean } = {},
+  ): void {
     // Supersede the previous holder so a late attacher can't keep writing
     // stdin as a ghost. The wrapper's close() implementation must null its
     // connection's state.session synchronously — the socket's late 'close'
     // event then sees null and cannot detach us from the *incoming* binding.
     this.socket?.close(4409, "superseded");
     this.socket = socket;
-    for (const chunk of this.backlog) socket.send(chunk);
-    this.backlog = [];
-    this.backlogBytes = 0;
+    const start = opts.replay
+      ? this.droppedBytes
+      : Math.max(this.deliveredBytes, this.droppedBytes);
+    let offset = this.droppedBytes;
+    for (const chunk of this.log) {
+      const end = offset + chunk.length;
+      if (end > start) {
+        socket.send(end - offset === chunk.length ? chunk : chunk.subarray(start - offset));
+      }
+      offset = end;
+    }
+    this.deliveredBytes = offset;
   }
 
   detach(): void {
@@ -163,15 +189,16 @@ export class Session {
   warned = false;
 
   private pushOutput(chunk: Buffer): void {
+    this.log.push(chunk);
+    this.logBytes += chunk.length;
+    while (this.logBytes > Session.BACKLOG_CAP && this.log.length > 1) {
+      const dropped = this.log.shift()!;
+      this.logBytes -= dropped.length;
+      this.droppedBytes += dropped.length;
+    }
     if (this.socket) {
       this.socket.send(chunk);
-      return;
-    }
-    this.backlog.push(chunk);
-    this.backlogBytes += chunk.length;
-    while (this.backlogBytes > Session.BACKLOG_CAP && this.backlog.length > 1) {
-      const dropped = this.backlog.shift()!;
-      this.backlogBytes -= dropped.length;
+      this.deliveredBytes = this.droppedBytes + this.logBytes;
     }
   }
 }
