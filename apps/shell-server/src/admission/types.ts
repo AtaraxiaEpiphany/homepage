@@ -42,6 +42,12 @@ export interface AdmissionStore {
   enqueue(visitorId: string | null): Promise<QueueHandle>;
   /** Refund one session for this visitor. Idempotent per session end. */
   release(visitorId: string | null): void;
+  /**
+   * Re-check the queue for grantable entries now, without waiting for a
+   * session end. The warm pool calls it after a shrink frees a slot.
+   * Optional: the redis store drains opportunistically on its own cycle.
+   */
+  drain?(): void;
   queueDepth(): number;
   /** Fires whenever queue membership changes — position updates fan out. */
   onDepthChange(cb: () => void): void;

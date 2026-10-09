@@ -108,9 +108,11 @@ export class MemoryAdmission implements AdmissionStore {
   /**
    * Grant head-of-line entries while capacity lasts. A visitor whose budget
    * vanished while queued (another tab won the race) rotates to the tail so
-   * later entries pass; a full rotation means nobody is grantable.
+   * later entries pass; a full rotation means nobody is grantable. Public:
+   * the warm pool calls it after a shrink frees a slot — capacity that
+   * appears without a session end would otherwise wait for one.
    */
-  private drain(): void {
+  drain(): void {
     if (this.disposed) return;
     let scanned = 0;
     while (

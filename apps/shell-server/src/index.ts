@@ -29,6 +29,13 @@ const pool = new WarmPool(
   () => registry.size,
 );
 const { store: admission, redis } = await createAdmission(() => registry.size + pool.reserved());
+// Waiting-room visitors outrank warm spares: when the queue grows past the
+// free capacity the pool sheds shells (and wakes the queue to claim the
+// slots); when it shrinks the pool refills. queueDepth is read through the
+// store so broker mode sees its remote queue.
+pool.queueDepth = () => admission.queueDepth();
+pool.onCapacityFreed = () => admission.drain?.();
+admission.onDepthChange(() => pool.fill());
 
 // CORS: /api/admit mutates shared admission state, so cross-origin callers
 // must be allowlisted (CORS_ORIGINS). Empty keeps the dev reflect-all — a

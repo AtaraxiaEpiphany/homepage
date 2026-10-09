@@ -22,6 +22,14 @@ export class WarmPool {
   private inFlight = 0;
   private disposed = false;
   private timer: NodeJS.Timeout;
+  /** Set by index.ts: pokes the admission queue after a shrink freed a slot. */
+  onCapacityFreed: (() => void) | null = null;
+  /**
+   * Waiting-room depth, wired by index.ts once admission exists (the pool is
+   * constructed first). A queued visitor outranks a warm spare: the shrink
+   * path below sheds ready shells rather than let one hold the last slot.
+   */
+  queueDepth: () => number = () => 0;
 
   constructor(
     private readonly size: number,
@@ -37,23 +45,52 @@ export class WarmPool {
     return this.ready.length + this.inFlight;
   }
 
-  /** Spawn toward the target while the max-sessions invariant allows. */
+  /**
+   * Reconcile the pool toward its target: kill warm spares when waiting-room
+   * visitors outrank them (a queued grant consumes a ready shell or a cold
+   * spawn either way — the spare must never hold the last slot hostage),
+   * spawn toward the target while the max-sessions invariant allows.
+   */
   fill(): void {
     if (this.disposed) return;
+    let shrunk = 0;
+    while (
+      this.ready.length > 0 &&
+      this.boundCount() + this.reserved() + this.queueDepth() > config.maxSessions
+    ) {
+      const session = this.ready.pop()!;
+      // Dying on purpose is not a refill signal — the shrink IS the refill
+      // decision; a fresh spawn here would just re-grab the freed slot.
+      session.onPooledExit = null;
+      if (!session.exited) session.kill();
+      shrunk += 1;
+    }
+    if (shrunk > 0) {
+      incCounter("pool_churn_total", undefined, shrunk);
+      this.publish();
+      // The freed slot is invisible to the admission queue's capacity check
+      // until something re-reads it — wake the waiting room now.
+      this.onCapacityFreed?.();
+    }
     while (
       !this.disposed &&
       this.ready.length + this.inFlight < this.size &&
-      this.boundCount() + this.reserved() < config.maxSessions
+      this.boundCount() + this.reserved() + this.queueDepth() < config.maxSessions
     ) {
       this.inFlight += 1;
       try {
         const session = this.spawn();
         session.pooledAt = Date.now();
         session.onPooledExit = () => {
-          // Died while waiting (docker gone, OOM): drop and refill.
+          // Died while waiting (docker gone, OOM): drop and refill. A shell
+          // that died at once means the failure is persistent (box missing,
+          // image broken) — refill on a delay, or the exit→fill loop becomes
+          // a tight respawn spinning on a failing docker exec.
           this.ready = this.ready.filter((s) => s !== session);
           this.publish();
-          this.fillAsync();
+          const livedMs = session.pooledAt === null ? Infinity : Date.now() - session.pooledAt;
+          if (livedMs > 5_000) this.fillAsync();
+          else setTimeout(() => this.fill(), 2_000).unref();
         };
         this.ready.push(session);
         incCounter("pool_spawns_total");

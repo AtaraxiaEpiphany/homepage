@@ -222,6 +222,11 @@ export class RedisAdmission implements AdmissionStore {
       .catch((err) => logRedisError(err, "release"));
   }
 
+  /** Re-check the queue now — the warm pool calls this after a shrink. */
+  drain(): void {
+    void this.drainQueue().catch((err) => logRedisError(err, "drain"));
+  }
+
   queueDepth(): number {
     return this.lastDepth;
   }
