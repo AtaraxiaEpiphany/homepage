@@ -17,10 +17,12 @@ local -r b_name=$'\e[1;38;5;62m' # bold purple — the heading name
 local -r c_it=$'\e[3m'           # italic — the tagline
 
 print
-print -r -- "  ${c_name}████ █  █ █   ██ █▀▀▄${c_r}"
-print -r -- "  ${c_name} ▐▌  █  █ █   ▐▌ █  █${c_r}"
-print -r -- "  ${c_name} ▐▌  █  █ █   ▐▌ █▄▄ ${c_r}"
-print -r -- "  ${c_name} ▐▌ ▝▙▟▖ █▄▄ ▟▙ █${c_r}"
+print -r -- "  ${c_name}██████  ██  ██  ██     ████  ██████${c_r}"
+print -r -- "  ${c_name}  ██    ██  ██  ██      ██   ██  ██${c_r}"
+print -r -- "  ${c_name}  ██    ██  ██  ██      ██   ██  ██${c_r}"
+print -r -- "  ${c_name}  ██    ██  ██  ██      ██   ██████${c_r}"
+print -r -- "  ${c_name}  ██    ██████  █████   ██   ██${c_r}"
+print -r -- "  ${c_name}  ██    ██████  █████  ████  ██${c_r}"
 print
 print -r -- "  ${b_name}hannibal${c_r} ${c_dim}—${c_r} ${c_link}hi@example.com${c_r}"
 print -r -- "  🐙 ${c_link}github${c_r} ${c_dim}·${c_r} 📝 ${c_link}blog${c_r} ${c_dim}·${c_r} 📡 ${c_link}rss${c_r} ${c_dim}— ship with the real launch${c_r}"
