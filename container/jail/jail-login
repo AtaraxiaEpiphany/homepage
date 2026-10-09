@@ -34,6 +34,7 @@ esac
 base=/var/lib/sessions/$uid
 home=$base/home
 tmp=$base/tmp
+uname=tulipj$((uid - 10000))
 rm -rf "$base"
 # The content mountpoint must exist inside the (otherwise empty) home so the
 # read-only re-bind below lands inside it; once mounted, the mountpoint dir
@@ -64,13 +65,22 @@ exec unshare \
     # Hide every session base (other tenants homes included) from this jail.
     mount -t tmpfs -o size=1m,mode=700 tmpfs /var/lib/sessions
     # rlimits land on this shell and are inherited by everything it spawns:
-    # 512MB address space, 64 procs (RLIMIT_NPROC is per-uid — the lease
-    # makes that per-session), 256 fds, 64MB file writes. Soft values: the
-    # session stays well under the box caps without a hard cliff. The shell
-    # builtin does it because prlimit self-set no-ops on this util-linux
-    # build, and the inner wrapper is zsh for the same reason.
+    # 1GB address space (Go binaries like fzf reserve large virtual ranges —
+    # 512MB kills them at startup), 64 procs (RLIMIT_NPROC is per-uid — the
+    # lease makes that per-session), 256 fds, 64MB file writes. Soft values:
+    # the session stays well under the box caps without a hard cliff. The
+    # shell builtin does it because prlimit self-set no-ops on this
+    # util-linux build, and the inner wrapper is zsh for the same reason.
+    # HOME/USER/LOGNAME must be re-exported: docker exec passes the box
+    # root environment straight through setpriv, and a HOME of /root
+    # sends every dotfile cache write against a directory the uid cannot
+    # even traverse.
     exec setpriv \
       --reuid='"$uid"' --regid='"$uid"' --clear-groups \
       -- /bin/zsh -f -c \
-      "ulimit -v 524288 -u 64 -n 256 -f 65536; exec /bin/zsh -l"
+      "export HOME=/home/tulip USER='"$uname"' LOGNAME='"$uname"'; ulimit -v 1048576 -u 64 -n 256 -f 65536; exec /bin/zsh -l"
   '
+  # The single-quoted block above must stay apostrophe-free: every ' inside
+  # it toggles this file quoting (the "$var" splices rely on that). One
+  # stray "root's" in a comment made the whole inner script unparseable,
+  # reported only as an unterminated-quote syntax error at EOF.
