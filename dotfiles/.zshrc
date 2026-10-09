@@ -3,6 +3,11 @@
 # everything else mirrors the host ~/.zshrc order.
 # ZDOTDIR=/opt/dotfiles, ZIM_HOME=/opt/zim (both read-only, baked at build).
 
+# History lives in the per-session home (a writable tmpfs): zsh's default
+# HISTFILE is $ZDOTDIR/.zhistory, which sits on the read-only rootfs and
+# fails to lock at shell exit.
+HISTFILE=$HOME/.zhistory
+
 [ -f "$ZDOTDIR/.shellrc" ] && source "$ZDOTDIR/.shellrc"
 
 # Zim modules — init.zsh is prebuilt at image build time; no download or
