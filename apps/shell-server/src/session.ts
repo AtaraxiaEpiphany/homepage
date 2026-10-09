@@ -160,6 +160,15 @@ export class Session {
     this.pty.write(data.toString("utf8"));
   }
 
+  /**
+   * Emit a server notice into the terminal output stream (replay log and
+   * live socket included) WITHOUT feeding it to the shell — write() here
+   * would type the notice as shell input and execute it.
+   */
+  notice(text: string): void {
+    this.pushOutput(Buffer.from(text));
+  }
+
   resize(cols: number, rows: number): void {
     // The exec client's pty dies with the shell; a resize (or write) racing
     // the exit event would otherwise throw EBADF straight through the ws
@@ -328,7 +337,7 @@ export class SessionRegistry {  private sessions = new Map<string, Session>();
       const idleFor = now - session.lastActivity;
       if (idleFor > idleMs && !session.warned) {
         session.warned = true;
-        session.write(Buffer.from("\r\n\x1b[33m[shell-server] idle timeout in 60s — press any key to keep the session\x1b[0m\r\n"));
+        session.notice("\r\n\x1b[33m[shell-server] idle timeout in 60s — press any key to keep the session\x1b[0m\r\n");
       } else if (session.warned && idleFor > idleMs + 60_000) {
         session.kill();
       }
