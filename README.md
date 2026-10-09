@@ -14,7 +14,17 @@ A full-page light terminal as the homepage, backed by a **real shell** (zsh + fz
 - **Ctrl+P / Ctrl+Shift+P / ⌘P / ⌘⇧P**: VS Code-style command palette — fuzzy-search commands and `content/` files, shows recently opened; Enter routes markdown to the viewer, commands go to the real shell. Bound at the page level, so it works without focusing the terminal first. The page keeps Ctrl+P for the palette, so shell previous-history lives on ↑ / Ctrl-R (inside the fzf picker, navigate with the arrows or Ctrl-J/K).
 - **Welcome screen**: the motd doubles as the site's hero — a one-line tagline and a quickstart (`open hello.md`, `demo`, `theme dark`, `status`) with the key hints, printed once per shell in English.
 - When the backend is unreachable an offline overlay appears (startup hints + retry button), with exponential-backoff reconnects; reloading reattaches to a still-live session.
-- **Concurrency ladder**: a warm pool pre-spawns shells so creates land in ~20ms; when capacity is full visitors queue in a waiting room (live position, fairness keyed by a per-browser token); per-IP floors throttle create spam, auth-failure lockout and connection caps; grace/idle timeouts tighten under saturation; `/api/metrics` exposes the counters. Pool shells count inside `MAX_SESSIONS`, so the worst-case host load is unchanged. With `BROKER_REDIS_URL` set, several hosts share one waiting room through redis — a saturated host's queued visitors are granted on whichever host drains next (see *Broker mode* below).
+- **Concurrency ladder**: one persistent box container hosts every session as
+  an isolated bwrap jail (cheap `docker exec` + uid lease instead of a full
+  `docker run`), and a warm pool pre-spawns jails so creates land in ~20ms;
+  when capacity is full visitors queue in a waiting room (live position,
+  fairness keyed by a per-browser token); per-IP floors throttle create spam,
+  auth-failure lockout and connection caps; grace/idle timeouts tighten under
+  saturation; `/api/metrics` exposes the counters. Pool shells count inside
+  `MAX_SESSIONS`, so the worst-case host load is unchanged. With
+  `BROKER_REDIS_URL` set, several hosts share one waiting room through redis —
+  a saturated host's queued visitors are granted on whichever host drains next
+  (see *Broker mode* below).
 - **Demo replay fallback**: when the queue runs deep or admission rejects, the overlay plays `content/replay.cast` (asciinema v2, served from the content jail) into a small read-only terminal so waiting visitors see what the shell does; the cast is optional and deployments without one just skip it.
 
 ## Architecture
@@ -26,12 +36,22 @@ Browser (GitHub Pages, static)  apps/web    React 19 + Vite + @xterm/xterm
   └─ OSC 7770                   `open` in the shell → in-page viewer
         │
 Host  apps/shell-server          Fastify + @fastify/websocket + node-pty (Node 22)
-  └─ one disposable container per WS session   docker run --rm homepage-shell
+  └─ docker exec per session     one persistent box container (homepage-shell-box)
         │
-Container  container/Dockerfile  ubuntu:24.04 · zimfw + fzf + eza + bat + fd
+Jail (per session)  bwrap       own pid/ipc/mount ns, uid tulipjN, throwaway
+                                 home+tmp, rlimits; zsh + fzf + eza + bat inside
 ```
 
-Sandboxing: each session gets `docker run --rm` with a `--read-only` rootfs, `--network none`, `--cap-drop ALL`, `no-new-privileges`, pids/mem/cpu limits, the content directory bind-mounted read-only, running as non-root. Path validation for `open` (jail + size cap) happens twice — in the shell function and at the HTTP layer — so a forged OSC gains nothing. Sessions are bound to a per-session secret issued at create; the id alone grants nothing.
+Sandboxing: sessions share ONE persistent, `--read-only`, `--network none` box
+container and isolate through per-session bwrap jails (`container/jail/jail-login`):
+each session gets its own pid/ipc/mount namespaces, a uid leased from the
+`tulipjN` range (10000–10031), a throwaway home + `/tmp` wiped before every
+spawn, per-jail rlimits (512MB address space, 64 procs, 256 fds), and the
+content directory re-bound read-only. bwrap drops every capability before the
+shell execs. Path validation for `open` (jail + size cap) happens twice — in
+the shell function and at the HTTP layer — so a forged OSC gains nothing.
+Sessions are bound to a per-session secret issued at create; the id alone
+grants nothing.
 
 ## Local development
 
@@ -125,4 +145,4 @@ Markdown files under `content/` are what `open` and the command palette can open
 
 ## Explicitly out of scope (post-MVP)
 
-Public-facing auth/TLS termination (reverse proxy territory), tmux session persistence, deep mobile adaptation. (Warm container pools shipped — see the concurrency ladder in Features.)
+Public-facing auth/TLS termination (reverse proxy territory), tmux session persistence, deep mobile adaptation. (Warm pools and the single-box bwrap jail architecture shipped — see the concurrency ladder in Features.)
