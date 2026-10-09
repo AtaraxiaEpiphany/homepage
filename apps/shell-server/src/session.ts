@@ -156,14 +156,21 @@ export class Session {
 
   write(data: Buffer): void {
     this.lastActivity = Date.now();
+    if (this.exited) return;
     this.pty.write(data.toString("utf8"));
   }
 
   resize(cols: number, rows: number): void {
-    if (cols > 0 && rows > 0) {
+    // The exec client's pty dies with the shell; a resize (or write) racing
+    // the exit event would otherwise throw EBADF straight through the ws
+    // handler and take the server down.
+    if (this.exited || cols <= 0 || rows <= 0) return;
+    try {
       this.cols = cols;
       this.rows = rows;
       this.pty.resize(cols, rows);
+    } catch {
+      // exited between the check and the ioctl
     }
   }
 
@@ -178,9 +185,19 @@ export class Session {
    */
   nudge(): void {
     if (this.exited || this.rows <= 1) return;
-    this.pty.resize(this.cols, this.rows - 1);
+    try {
+      this.pty.resize(this.cols, this.rows - 1);
+    } catch {
+      return;
+    }
     const restore = setTimeout(() => {
-      if (!this.exited) this.pty.resize(this.cols, this.rows);
+      if (!this.exited) {
+        try {
+          this.pty.resize(this.cols, this.rows);
+        } catch {
+          // shell exited mid-restore
+        }
+      }
     }, 50);
     restore.unref();
   }
@@ -192,7 +209,11 @@ export class Session {
   kill(): void {
     if (this.exited) return;
     incCounter("session_kills_total");
-    this.pty.kill();
+    try {
+      this.pty.kill();
+    } catch {
+      // fd already gone — the exit event lands momentarily
+    }
   }
 
   warned = false;
