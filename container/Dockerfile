@@ -36,7 +36,14 @@ RUN chmod -R a+rX /etc/tmux.conf /etc/tmux
 
 # Non-root shell user "tulip" (uid 1000, what the shell-server runs as) —
 # ubuntu:24.04 ships an 'ubuntu' user at that uid; drop it and reuse it.
-RUN userdel -r ubuntu 2>/dev/null; useradd -m -u 1000 -s /usr/bin/zsh tulip
+# The tulipjN accounts name the per-session jail uids (10000..10031) that
+# bwrap's setpriv drops to — they own no files and have no shell; passwd
+# entries just make `ls -l`/`whoami` inside a jail human-readable.
+RUN userdel -r ubuntu 2>/dev/null; useradd -m -u 1000 -s /usr/bin/zsh tulip \
+ && i=0; while [ "$i" -lt 32 ]; do \
+      useradd -M -u $((10000 + i)) -s /usr/sbin/nologin "tulipj$i" || exit 1; \
+      i=$((i + 1)); \
+    done
 
 # zimfw headless install: download once, run `init` (≡ install, but startup-
 # tailored) against .zimrc → /opt/zim/init.zsh + 14 modules.
@@ -55,7 +62,12 @@ RUN mkdir -p "$ZIM_HOME" \
 COPY dotfiles/ /opt/dotfiles/
 RUN chmod -R a+rX /opt/dotfiles
 
-USER tulip
+# The per-session jail entrypoint. The box runs as root (bwrap needs
+# CAP_SYS_ADMIN to build the jail mounts; jail-login drops to the session
+# uid via setpriv before the shell execs), so no USER directive here.
+COPY container/jail/jail-login /usr/local/sbin/jail-login
+RUN chmod 755 /usr/local/sbin/jail-login
+
 WORKDIR /home/tulip/content
 
 CMD ["zsh", "-l"]

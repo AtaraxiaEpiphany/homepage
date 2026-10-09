@@ -1,0 +1,76 @@
+#!/bin/sh
+# Per-session jail inside the persistent shell box. Invoked by the
+# shell-server: `docker exec -it <box> /usr/local/sbin/jail-login <uid>`.
+#
+# One jail per session: a private pid/ipc/mount namespace under its own uid,
+# with a throwaway writable home and /tmp carved from the box tmpfs. Every
+# other path stays the read-only box rootfs; the content jail is re-bound
+# read-only at the same path inside the writable home. Mounts are set up as
+# root, then setpriv drops to the session uid (with the per-jail rlimits
+# applied at the same exec) before the shell starts — no privileged code
+# runs with an attached attacker terminal.
+#
+# bwrap was the first choice here but cannot run under docker's default
+# seccomp+mount-locking: it unconditionally remounts / slave in its new
+# mount namespace, and the container rootfs mount is MNT_LOCKED, so the
+# remount is EPERM even with CAP_SYS_ADMIN. Same for unshare(1)'s default
+# propagation change. The box therefore runs with seccomp=unconfined and
+# this script unshares with --propagation=unchanged — the box's mounts are
+# all private, so the jail's extra mounts stay contained. Capabilities stay
+# the real gate: the box holds eight caps, and the shell process none.
+#
+# uid range is fixed at build time (passwd entries tulipj0..31 = 10000..10031);
+# the shell-server leases one uid per live session. Wiping $base here means a
+# recycled uid never sees its previous tenant's files.
+set -eu
+
+uid=${1:?usage: jail-login <uid>}
+case $uid in
+  100[0-2][0-9]) ;;               # 10000..10029
+  1003[0-1]) ;;                   # 10030..10031
+  *) echo "jail-login: uid out of range: $uid" >&2; exit 2 ;;
+esac
+
+base=/var/lib/sessions/$uid
+home=$base/home
+tmp=$base/tmp
+rm -rf "$base"
+# The content mountpoint must exist inside the (otherwise empty) home so the
+# read-only re-bind below lands inside it; once mounted, the mountpoint dir
+# cannot be removed by the session (EBUSY). $base/content stages the box's
+# content mount BEFORE the home bind covers /home/tulip — mount(8) resolves
+# sources at call time (bwrap pre-opens, which is what we replaced).
+mkdir -p "$home/content" "$tmp" "$base/content"
+chown "$uid:$uid" "$home" "$home/content" "$tmp"
+chmod 700 "$home" "$tmp"
+
+exec unshare \
+  --mount \
+  --propagation=unchanged \
+  --pid \
+  --ipc \
+  --fork \
+  /bin/sh -c '
+    set -eu
+    mount -t proc proc /proc
+    mount -t tmpfs -o size=64m,mode=1777 tmpfs /dev/shm
+    # Stage the box content mount where the home bind cannot cover it, then
+    # re-bind it read-only at the same path inside the (writable) home.
+    mount --bind /home/tulip/content '"$base"'/content
+    mount --bind '"$home"' /home/tulip
+    mount --bind '"$base"'/content /home/tulip/content
+    mount -o remount,bind,ro /home/tulip/content
+    mount --bind '"$tmp"' /tmp
+    # Hide every session base (other tenants homes included) from this jail.
+    mount -t tmpfs -o size=1m,mode=700 tmpfs /var/lib/sessions
+    # rlimits land on this shell and are inherited by everything it spawns:
+    # 512MB address space, 64 procs (RLIMIT_NPROC is per-uid — the lease
+    # makes that per-session), 256 fds, 64MB file writes. Soft values: the
+    # session stays well under the box caps without a hard cliff. The shell
+    # builtin does it because prlimit self-set no-ops on this util-linux
+    # build, and the inner wrapper is zsh for the same reason.
+    exec setpriv \
+      --reuid='"$uid"' --regid='"$uid"' --clear-groups \
+      -- /bin/zsh -f -c \
+      "ulimit -v 524288 -u 64 -n 256 -f 65536; exec /bin/zsh -l"
+  '
