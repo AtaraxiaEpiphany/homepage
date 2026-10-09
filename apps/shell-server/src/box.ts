@@ -42,7 +42,23 @@ export async function ensureBox(): Promise<void> {
     child.on("error", () => resolve(false));
     child.on("exit", (code) => resolve(code === 0 && out.trim() === "true"));
   });
-  if (healthy) return;
+  if (healthy) {
+    // A crashed/killed predecessor leaves its jails running (their exec
+    // clients die but the box survives). Every tulipjN process is by
+    // definition stale at boot — no session of ours exists yet — so sweep
+    // the whole range before handing out leases, or a recycled uid would
+    // inherit a live process.
+    // pkill's -U takes a comma list, not a range.
+    const uids = Array.from(
+      { length: config.jailUidSlots },
+      (_, i) => config.jailUidBase + i,
+    ).join(",");
+    await runDocker([
+      "exec", config.boxContainer, "/bin/sh", "-c",
+      `pkill -KILL -U ${uids} 2>/dev/null || true`,
+    ]).catch(() => {});
+    return;
+  }
   await runDocker(["rm", "-f", name]).catch(() => {});
   await runDocker(["run", ...BOX_RUN_FLAGS]);
 }
