@@ -94,19 +94,20 @@ export const config = {
 /**
  * `docker run` args for the box. It keeps CAP_SYS_ADMIN (the jail mounts
  * need it) but nothing else dangerous, drops the rest of docker's defaults.
- * seccomp is unconfined: docker's default profile denies mount(2) outright,
- * and the jail builder cannot work without it — capabilities and the
- * read-only, no-network rootfs stay the real gate. /var/lib/sessions is the
- * only writable path: the throwaway per-session homes/tmps live there and
- * die with the box.
+ * seccomp and AppArmor are both unconfined: docker's default seccomp profile
+ * denies mount(2) outright, and docker-default AppArmor denies it too — the
+ * jail builder cannot work without it. Capabilities and the read-only,
+ * no-network rootfs stay the real gate. /var/lib/sessions is the only
+ * writable path: the throwaway per-session homes/tmps live there and die
+ * with the box.
  */
 export const BOX_RUN_FLAGS = [
-  "run",
   "-d",
   "--name", config.boxContainer,
   "--network", "none",
   "--read-only",
   "--security-opt", "seccomp=unconfined",
+  "--security-opt", "apparmor=unconfined",
   "--tmpfs", "/var/lib/sessions:rw,nosuid,size=512m,mode=755",
   "--cap-drop=ALL",
   "--cap-add", "SYS_ADMIN",
