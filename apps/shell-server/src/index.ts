@@ -9,6 +9,7 @@ import { fileRoutes } from "./files.js";
 import { render } from "./metrics.js";
 import { installShutdown } from "./shutdown.js";
 import { createAdmission } from "./admission/index.js";
+import { ensureBox, disposeBox } from "./box.js";
 import { opsGuard } from "./opsauth.js";
 const app = Fastify({
   logger: true,
@@ -53,6 +54,9 @@ if (redis !== null) {
 }
 app.addHook("onClose", async () => {
   pool.dispose();
+  // Sessions first, then the box — killing the container sweeps anything
+  // left, so a skipped per-uid stray-kill cannot outlive the server.
+  await disposeBox();
   if (redis !== null) {
     // Broker onClose hook already retracted the heartbeat; close the socket.
     await redis.quit().catch(() => {});
@@ -66,6 +70,9 @@ app.get("/api/metrics", { preHandler: opsGuard }, async (_req, reply) => {
 });
 
 installShutdown(app, registry);
+// The box must exist before the warm pool tries to exec into it. A failure
+// here is fatal: every create would fail at spawn, so fail loudly instead.
+await ensureBox();
 pool.fill();
 
 await app.listen({ port: config.port, host: config.host });

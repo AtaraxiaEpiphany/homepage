@@ -27,7 +27,7 @@ export const config = {
    * (dev, loopback-only server) leaves the ops endpoints open like the rest.
    */
   opsToken: process.env.OPS_TOKEN || process.env.WS_TOKEN || "",
-  maxSessions: int("MAX_SESSIONS", 4),
+  maxSessions: int("MAX_SESSIONS", 8),
   /** Kill a session idle this long (ms), after a warning written into the PTY. */
   idleTimeoutMs: int("IDLE_TIMEOUT_MS", 30 * 60_000),
   /** Keep a detached session alive this long (ms) so the client can reattach. */
@@ -80,28 +80,59 @@ export const config = {
   /** Read-only content jail exposed to the shell and the /api/file* routes. */
   contentDir: path.resolve(process.env.CONTENT_DIR ?? path.join(REPO_ROOT, "content")),
   image: process.env.IMAGE ?? "homepage-shell:latest",
+  /**
+   * The persistent shell box: one long-lived container every session execs
+   * into. Sessions jail inside it with bwrap (see container/jail/jail-login)
+   * — container boot cost is paid once at server boot instead of per session.
+   */
+  boxContainer: process.env.BOX_CONTAINER ?? "homepage-shell-box",
+  /** Jail uid range — must match the tulipjN passwd entries baked into the image. */
+  jailUidBase: int("JAIL_UID_BASE", 10000),
+  jailUidSlots: int("JAIL_UID_SLOTS", 32),
 };
 
-export const DOCKER_RUN_FLAGS = [
+/**
+ * `docker run` args for the box. It keeps CAP_SYS_ADMIN (the jail mounts
+ * need it) but nothing else dangerous, drops the rest of docker's defaults.
+ * seccomp is unconfined: docker's default profile denies mount(2) outright,
+ * and the jail builder cannot work without it — capabilities and the
+ * read-only, no-network rootfs stay the real gate. /var/lib/sessions is the
+ * only writable path: the throwaway per-session homes/tmps live there and
+ * die with the box.
+ */
+export const BOX_RUN_FLAGS = [
   "run",
-  "--rm",
+  "-d",
+  "--name", config.boxContainer,
+  "--network", "none",
+  "--read-only",
+  "--security-opt", "seccomp=unconfined",
+  "--tmpfs", "/var/lib/sessions:rw,nosuid,size=512m,mode=755",
+  "--cap-drop=ALL",
+  "--cap-add", "SYS_ADMIN",
+  "--cap-add", "CHOWN",
+  "--cap-add", "DAC_OVERRIDE",
+  "--cap-add", "FOWNER",
+  "--cap-add", "FSETID",
+  "--cap-add", "SETUID",
+  "--cap-add", "SETGID",
+  "--cap-add", "KILL",
+  "--pids-limit", "4096",
+  "--memory", "3g",
+  "--cpus", "2.0",
+  "--mount", `type=bind,src=${config.contentDir},dst=/home/tulip/content,ro,bind-recursive=disabled`,
+  config.image,
+  "sleep", "infinity",
+];
+
+/** `docker exec` args that land a session shell in its bwrap jail. */
+export const boxExecFlags = (uid: number): string[] => [
+  "exec",
   "--interactive",
   "--tty",
-  "--init",
-  "--user", "1000:1000",
-  "--read-only",
-  "--tmpfs", "/tmp:rw,nosuid,size=64m,mode=1777",
-  "--tmpfs", "/home/tulip:rw,nosuid,size=64m,uid=1000,mode=755",
-  "--mount", `type=bind,src=${config.contentDir},dst=/home/tulip/content,ro,bind-recursive=disabled`,
-  "--cap-drop=ALL",
-  "--security-opt", "no-new-privileges",
-  "--pids-limit", "256",
-  "--memory", "512m",
-  "--cpus", "1.0",
-  "--network", "none",
-  config.image,
-  "zsh",
-  "-l",
+  config.boxContainer,
+  "/usr/local/sbin/jail-login",
+  String(uid),
 ];
 
 if (!existsSync(config.contentDir)) {

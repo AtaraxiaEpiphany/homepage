@@ -1,15 +1,18 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { spawn, type IPty } from "node-pty";
-import { DOCKER_RUN_FLAGS, config } from "./config.js";
+import { boxExecFlags, config } from "./config.js";
+import { killStrays } from "./box.js";
+import { leaseUid, releaseUid } from "./uid.js";
 import { SPAWN_BUCKETS_MS, incCounter, observeHistogram, setGauge } from "./metrics.js";
 
 /** Module-level so the gauge survives registry map churn between create/exit. */
 let liveSessions = 0;
 
 /**
- * One Session = one ephemeral `docker run` of the shell image, one node-pty.
- * Resource limits apply per session; zsh exiting tears the container down
- * (--rm) so nothing accumulates across sessions.
+ * One Session = one bwrap jail inside the persistent shell box, one node-pty
+ * wrapping its `docker exec`. Each jail runs under a leased uid with its own
+ * pid/ipc/mount namespaces and throwaway home+tmp; the session's uid is
+ * swept for strays and released when the shell exits.
  */
 export class Session {
   readonly id = randomUUID();
@@ -21,6 +24,8 @@ export class Session {
   exited = false;
   /** Fairness key of the creating client, for admission accounting. */
   visitorId: string | null = null;
+  /** The box uid this session's jail runs as; released after stray-sweep. */
+  readonly jailUid = leaseUid();
   /** When the warm pool took this session in; null once handed out. */
   pooledAt: number | null = null;
   /** Set by the warm pool: fires when the shell dies while still pooled. */
@@ -56,7 +61,7 @@ export class Session {
     this.cols = cols;
     this.rows = rows;
     this.exitFinalizer = onExit;
-    this.pty = spawn("docker", DOCKER_RUN_FLAGS, {
+    this.pty = spawn("docker", boxExecFlags(this.jailUid), {
       name: "xterm-256color",
       cols,
       rows,
@@ -86,6 +91,10 @@ export class Session {
       this.exitCode = exitCode ?? null;
       setGauge("sessions_active", --liveSessions);
       incCounter("session_exits_total");
+      // Sweep the uid for processes the dead exec client may have orphaned
+      // inside the box, then return it to the free list — release only after
+      // the sweep so a recycled uid can never inherit a live process.
+      void killStrays(this.jailUid).then(() => releaseUid(this.jailUid));
       this.onPooledExit?.();
       this.exitFinalizer(this);
     });
